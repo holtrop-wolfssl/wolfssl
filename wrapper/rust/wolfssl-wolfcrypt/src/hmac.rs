@@ -46,6 +46,8 @@ impl HMAC {
     pub const TYPE_SHA3_256: i32 = sys::wc_HashType_WC_HASH_TYPE_SHA3_256 as i32;
     pub const TYPE_SHA3_384: i32 = sys::wc_HashType_WC_HASH_TYPE_SHA3_384 as i32;
     pub const TYPE_SHA3_512: i32 = sys::wc_HashType_WC_HASH_TYPE_SHA3_512 as i32;
+    pub const TYPE_BLAKE2B: i32 = sys::wc_HashType_WC_HASH_TYPE_BLAKE2B as i32;
+    pub const TYPE_BLAKE2S: i32 = sys::wc_HashType_WC_HASH_TYPE_BLAKE2S as i32;
 
     /// Get HMAC hash size by type.
     ///
