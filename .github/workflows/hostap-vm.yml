@@ -28,7 +28,7 @@ jobs:
               --enable-tlsv10 --enable-oldtls
     name: Build wolfSSL
     if: github.repository_owner == 'wolfssl'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # This should be a safe limit for the tests to run.
     timeout-minutes: 10
     steps:
@@ -66,7 +66,7 @@ jobs:
   checkout_hostap:
     name: Checkout hostap repo
     if: github.repository_owner == 'wolfssl'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # This should be a safe limit for the tests to run.
     timeout-minutes: 10
     steps:
@@ -85,7 +85,7 @@ jobs:
   build_uml_linux:
     name: Build UML (UserMode Linux)
     if: github.repository_owner == 'wolfssl'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # This should be a safe limit for the tests to run.
     timeout-minutes: 10
     needs: checkout_hostap
@@ -164,7 +164,7 @@ jobs:
             }
     name: hwsim test
     if: github.repository_owner == 'wolfssl'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # This should be a safe limit for the tests to run.
     timeout-minutes: 45
     needs: [build_wolfssl, build_uml_linux, checkout_hostap]
