@@ -274,6 +274,7 @@ fn scan_cfg() -> Result<()> {
     /* random */
     check_cfg(&binding, "wc_RNG_DRBG_Reseed", "random_hashdrbg");
     check_cfg(&binding, "wc_InitRng", "random");
+    check_cfg(&binding, "wc_SetSeed_Cb_fips", "rng_seed_cb");
 
     /* rsa */
     check_cfg(&binding, "wc_InitRsaKey", "rsa");
