@@ -87,7 +87,7 @@ impl RNG {
     /// A Result which is Ok(RNG) on success or an Err containing the wolfSSL
     /// library return code on failure.
     pub fn new_ex(heap: Option<*mut std::os::raw::c_void>, dev_id: Option<i32>) -> Result<Self, i32> {
-        #[cfg(rng_seed_cb)]
+        #[cfg(fips)]
         {
             let rc = unsafe {
                 sys::wc_SetSeed_Cb_fips(Some(sys::wc_GenerateSeed))

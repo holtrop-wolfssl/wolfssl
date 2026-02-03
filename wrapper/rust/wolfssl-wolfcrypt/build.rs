@@ -255,6 +255,9 @@ fn scan_cfg() -> Result<()> {
     check_cfg(&binding, "wc_ed448_verify_msg_ex", "ed448_verify");
     check_cfg(&binding, "wc_ed448_verify_msg_init", "ed448_streaming_verify");
 
+    /* fips */
+    check_cfg(&binding, "wc_SetSeed_Cb_fips", "fips");
+
     /* hkdf */
     check_cfg(&binding, "wc_HKDF_Extract_ex", "hkdf");
 
@@ -274,7 +277,6 @@ fn scan_cfg() -> Result<()> {
     /* random */
     check_cfg(&binding, "wc_RNG_DRBG_Reseed", "random_hashdrbg");
     check_cfg(&binding, "wc_InitRng", "random");
-    check_cfg(&binding, "wc_SetSeed_Cb_fips", "rng_seed_cb");
 
     /* rsa */
     check_cfg(&binding, "wc_InitRsaKey", "rsa");

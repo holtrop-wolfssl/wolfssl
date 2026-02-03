@@ -6,7 +6,7 @@ all:
 
 .PHONY: test
 test:
-	cargo test
+	cargo test -- --test-threads=1
 
 .PHONY: clean
 clean:
