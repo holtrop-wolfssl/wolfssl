@@ -1,10 +1,12 @@
+#[cfg(fips)]
+fn setup_fips()
+{
+    use wolfssl_wolfcrypt::fips;
+    fips::set_private_key_read_enable(1).expect("Error with set_private_key_read_enable()");
+}
+
 pub fn setup()
 {
     #[cfg(fips)]
-    {
-        use wolfssl_wolfcrypt::sys;
-        unsafe {
-            sys::wolfCrypt_SetPrivateKeyReadEnable_fips(1, sys::wc_KeyType_WC_KEYTYPE_ALL);
-        }
-    }
+    setup_fips();
 }
