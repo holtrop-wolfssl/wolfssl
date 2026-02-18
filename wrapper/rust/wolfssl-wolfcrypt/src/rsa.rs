@@ -116,7 +116,9 @@ impl RSA {
     pub const MGF1SHA256     : i32 = sys::WC_MGF1SHA256 as i32;
     pub const MGF1SHA384     : i32 = sys::WC_MGF1SHA384 as i32;
     pub const MGF1SHA512     : i32 = sys::WC_MGF1SHA512 as i32;
+    #[cfg(rsa_mgf1sha512_224)]
     pub const MGF1SHA512_224 : i32 = sys::WC_MGF1SHA512_224 as i32;
+    #[cfg(rsa_mgf1sha512_256)]
     pub const MGF1SHA512_256 : i32 = sys::WC_MGF1SHA512_256 as i32;
 
     // Type constants used for `rsa_direct()`.

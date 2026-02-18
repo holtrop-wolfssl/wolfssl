@@ -166,18 +166,21 @@ fn read_file(path: String) -> Result<String> {
     Ok(content)
 }
 
-fn check_cfg(binding: &str, function_name: &str, cfg_name: &str) {
+fn check_cfg(binding: &str, function_name: &str, cfg_name: &str) -> bool {
     let pattern = format!(r"\b{}(_fips)?\b", function_name);
     let re = match Regex::new(&pattern) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error compiling regex '{}': {}", pattern, e);
-            return;
+            std::process::exit(1);
         }
     };
     println!("cargo::rustc-check-cfg=cfg({})", cfg_name);
     if re.is_match(binding) {
         println!("cargo:rustc-cfg={}", cfg_name);
+        true
+    } else {
+        false
     }
 }
 
@@ -199,6 +202,7 @@ fn scan_cfg() -> Result<()> {
     check_cfg(&binding, "wc_AesOfbEncrypt", "aes_ofb");
     check_cfg(&binding, "wc_AesXtsInit", "aes_xts");
     check_cfg(&binding, "wc_AesXtsEncryptInit", "aes_xts_stream");
+    check_cfg(&binding, "WC_AES_BLOCK_SIZE", "aes_wc_block_size");
 
     /* blake2 */
     check_cfg(&binding, "wc_InitBlake2b", "blake2b");
@@ -234,10 +238,19 @@ fn scan_cfg() -> Result<()> {
     check_cfg(&binding, "wc_ecc_verify_hash", "ecc_verify");
     check_cfg(&binding, "wc_ecc_export_x963", "ecc_export");
     check_cfg(&binding, "wc_ecc_import_x963", "ecc_import");
-    check_cfg(&binding, "ecc_curve_ids_ECC_X25519", "ecc_curve_25519");
-    check_cfg(&binding, "ecc_curve_ids_ECC_X448", "ecc_curve_448");
-    check_cfg(&binding, "ecc_curve_ids_ECC_SAKKE_1", "ecc_curve_sakke");
-    check_cfg(&binding, "ecc_curve_ids_ECC_CURVE_CUSTOM", "ecc_custom_curves");
+    if check_cfg(&binding, "ecc_curve_ids_ECC_CURVE_INVALID", "ecc_curve_ids") {
+        check_cfg(&binding, "ecc_curve_ids_ECC_SM2P256V1", "ecc_curve_sm2p256v1");
+        check_cfg(&binding, "ecc_curve_ids_ECC_X25519", "ecc_curve_25519");
+        check_cfg(&binding, "ecc_curve_ids_ECC_X448", "ecc_curve_448");
+        check_cfg(&binding, "ecc_curve_ids_ECC_SAKKE_1", "ecc_curve_sakke");
+        check_cfg(&binding, "ecc_curve_ids_ECC_CURVE_CUSTOM", "ecc_custom_curves");
+    } else {
+        check_cfg(&binding, "ecc_curve_id_ECC_SM2P256V1", "ecc_curve_sm2p256v1");
+        check_cfg(&binding, "ecc_curve_id_ECC_X25519", "ecc_curve_25519");
+        check_cfg(&binding, "ecc_curve_id_ECC_X448", "ecc_curve_448");
+        check_cfg(&binding, "ecc_curve_id_ECC_SAKKE_1", "ecc_curve_sakke");
+        check_cfg(&binding, "ecc_curve_id_ECC_CURVE_CUSTOM", "ecc_custom_curves");
+    }
 
     /* ed25519 */
     check_cfg(&binding, "wc_ed25519_init", "ed25519");
@@ -263,6 +276,7 @@ fn scan_cfg() -> Result<()> {
 
     /* hmac */
     check_cfg(&binding, "wc_HmacSetKey", "hmac");
+    check_cfg(&binding, "wc_HmacSetKey_ex", "hmac_setkey_ex");
 
     /* kdf */
     check_cfg(&binding, "wc_PBKDF2", "kdf_pbkdf2");
@@ -283,6 +297,9 @@ fn scan_cfg() -> Result<()> {
     check_cfg(&binding, "wc_RsaDirect", "rsa_direct");
     check_cfg(&binding, "wc_MakeRsaKey", "rsa_keygen");
     check_cfg(&binding, "wc_RsaPSS_Sign", "rsa_pss");
+    check_cfg(&binding, "wc_RsaSetRNG", "rsa_setrng");
+    check_cfg(&binding, "WC_MGF1SHA512_224", "rsa_mgf1sha512_224");
+    check_cfg(&binding, "WC_MGF1SHA512_256", "rsa_mgf1sha512_256");
 
     /* sha */
     check_cfg(&binding, "wc_InitSha", "sha");
