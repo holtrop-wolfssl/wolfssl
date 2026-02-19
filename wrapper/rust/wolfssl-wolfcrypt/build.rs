@@ -300,6 +300,12 @@ fn scan_cfg() -> Result<()> {
     check_cfg(&binding, "wc_RsaSetRNG", "rsa_setrng");
     check_cfg(&binding, "WC_MGF1SHA512_224", "rsa_mgf1sha512_224");
     check_cfg(&binding, "WC_MGF1SHA512_256", "rsa_mgf1sha512_256");
+    // Detect whether wc_RsaExportKey takes a const first arg (new API) or non-const (old API)
+    let re = Regex::new(r"pub fn wc_RsaExportKey(_fips)?\s*\(\s*\w+\s*:\s*\*\s*const").unwrap();
+    println!("cargo::rustc-check-cfg=cfg(rsa_const_api)");
+    if re.is_match(&binding) {
+        println!("cargo:rustc-cfg=rsa_const_api");
+    }
 
     /* sha */
     check_cfg(&binding, "wc_InitSha", "sha");
