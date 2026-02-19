@@ -124,7 +124,11 @@ fn generate_fips_aliases() -> Result<()> {
         if non_fips_re.is_match(&binding) {
             // Add any new known names defined with both a _fips suffix and not
             // here. Warn if any new ones are discovered.
-            if base_name != "wc_AesGcmEncrypt" {
+            let known_both = &[
+                "wc_AesGcmEncrypt",
+                "wc_AesCcmEncrypt",
+            ];
+            if !known_both.contains(&base_name) {
                 println!("cargo:warning=Skipping FIPS symbols alias for {}", base_name);
             }
         } else {
