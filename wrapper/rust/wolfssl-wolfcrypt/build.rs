@@ -331,6 +331,15 @@ fn scan_cfg() -> Result<()> {
     /* mlkem / ML-KEM */
     check_cfg(&binding, "wc_MlKemKey_Init", "mlkem");
 
+    /* lms / HSS */
+    let lms_enabled = check_cfg(&binding, "wc_LmsKey_Init", "lms");
+    let lms_make_key = check_cfg(&binding, "wc_LmsKey_MakeKey", "lms_make_key");
+    /* Detect WOLFSSL_LMS_VERIFY_ONLY: lms is enabled but MakeKey is absent */
+    println!("cargo::rustc-check-cfg=cfg(lms_verify_only)");
+    if lms_enabled && !lms_make_key {
+        println!("cargo:rustc-cfg=lms_verify_only");
+    }
+
     /* sha */
     check_cfg(&binding, "wc_InitSha", "sha");
     check_cfg(&binding, "wc_InitSha224", "sha224");
