@@ -633,7 +633,7 @@ impl Lms {
     /// library error code value.
     pub fn export_pub_from(&mut self, src: &Lms) -> Result<(), i32> {
         let rc = unsafe {
-            sys::wc_LmsKey_ExportPub(&mut self.ws_key, &src.ws_key as *const sys::LmsKey)
+            sys::wc_LmsKey_ExportPub(&mut self.ws_key, &src.ws_key)
         };
         if rc != 0 {
             return Err(rc);
