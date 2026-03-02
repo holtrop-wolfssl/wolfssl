@@ -234,7 +234,8 @@ impl Lms {
             return Err(rc);
         }
         let ws_key = unsafe { ws_key.assume_init() };
-        Ok(Lms { ws_key })
+        let lms = Lms { ws_key };
+        Ok(lms)
     }
 
     /// Set parameters using a predefined `wc_LmsParm` parameter set.
@@ -244,7 +245,7 @@ impl Lms {
     ///
     /// # Parameters
     ///
-    /// * `parm`: A `wc_LmsParm` value identifying the parameter set.
+    /// * `parm`: A `Lms::PARM_*` value identifying the parameter set.
     ///
     /// # Returns
     ///
@@ -257,7 +258,6 @@ impl Lms {
     /// #[cfg(lms)]
     /// {
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
     /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// }
@@ -435,7 +435,6 @@ impl Lms {
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// let mut rng = RNG::new().expect("Error creating RNG");
     /// let mut key = Lms::new().expect("Error with Lms::new()");
     /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
@@ -511,7 +510,6 @@ impl Lms {
     /// {
     /// use wolfssl_wolfcrypt::random::RNG;
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// let mut rng = RNG::new().expect("Error creating RNG");
     /// let mut key = Lms::new().expect("Error with Lms::new()");
     /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
@@ -577,7 +575,6 @@ impl Lms {
     /// #[cfg(lms)]
     /// {
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
     /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// let sig_len = key.get_sig_len().expect("Error with get_sig_len()");
@@ -606,7 +603,6 @@ impl Lms {
     /// #[cfg(lms)]
     /// {
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
     /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// let pub_len = key.get_pub_len().expect("Error with get_pub_len()");
@@ -665,7 +661,6 @@ impl Lms {
     /// #[cfg(all(lms, lms_make_key, random))]
     /// {
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
     /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// // After make_key():
@@ -707,7 +702,6 @@ impl Lms {
     /// #[cfg(all(lms, lms_make_key, random))]
     /// {
     /// use wolfssl_wolfcrypt::lms::Lms;
-    /// use wolfssl_wolfcrypt::sys;
     /// // After exporting:
     /// // let mut vkey = Lms::new().expect("Error with Lms::new()");
     /// // vkey.import_pub_raw(&pub_buf).expect("Error with import_pub_raw()");
