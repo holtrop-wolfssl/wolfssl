@@ -38,9 +38,9 @@ The total number of available signatures is `2^(levels * height)`.
 Larger `winternitz` values reduce signature size at the cost of slower
 key generation and signing.
 
-Predefined parameter sets are available as `sys::wc_LmsParm_WC_LMS_PARM_*`
-constants (e.g., `wc_LmsParm_WC_LMS_PARM_L1_H5_W4`), or parameters can
-be set directly via [`Lms::set_parameters()`].
+Predefined parameter sets are available as `Lms::PARM_*` constants
+(e.g., `Lms::PARM_L1_H5_W4`), or parameters can be set directly via
+[`Lms::set_parameters()`].
 
 Signing requires private key I/O callbacks to persist the evolving private
 key state. Register callbacks with [`Lms::set_write_cb()`] and
@@ -61,8 +61,7 @@ let mut rng = RNG::new().expect("RNG creation failed");
 let mut key = Lms::new().expect("Lms::new() failed");
 
 // Use a small, fast parameter set for demonstration.
-key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    .expect("set_parm failed");
+key.set_parm(Lms::PARM_L1_H5_W8).expect("set_parm failed");
 
 // The private key I/O callbacks must be registered before making a key.
 // (Omitted here for brevity; see set_write_cb / set_read_cb.)
@@ -77,8 +76,7 @@ key.sign(b"hello", &mut sig).expect("sign failed");
 key.export_pub_raw(&mut pub_buf).expect("export_pub_raw failed");
 
 let mut vkey = Lms::new().expect("Lms::new() for verify failed");
-vkey.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    .expect("set_parm failed");
+vkey.set_parm(Lms::PARM_L1_H5_W8).expect("set_parm failed");
 vkey.import_pub_raw(&pub_buf).expect("import_pub_raw failed");
 vkey.verify(&sig, b"hello").expect("verify failed");
 }
@@ -106,6 +104,70 @@ use crate::random::RNG;
 /// before calling [`Lms::make_key()`] or [`Lms::reload()`].
 pub struct Lms {
     ws_key: sys::LmsKey,
+}
+
+#[cfg(lms_sha256_256)]
+impl Lms {
+    pub const PARM_NONE: u32 = sys::wc_LmsParm_WC_LMS_PARM_NONE as u32;
+    pub const PARM_L1_H5_W1: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W1 as u32;
+    pub const PARM_L1_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W2 as u32;
+    pub const PARM_L1_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W4 as u32;
+    pub const PARM_L1_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32;
+    pub const PARM_L1_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W2 as u32;
+    pub const PARM_L1_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W4 as u32;
+    pub const PARM_L1_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W8 as u32;
+    pub const PARM_L1_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W2 as u32;
+    pub const PARM_L1_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W4 as u32;
+    pub const PARM_L1_H15_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W8 as u32;
+    pub const PARM_L1_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W2 as u32;
+    pub const PARM_L1_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W4 as u32;
+    pub const PARM_L1_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W8 as u32;
+    pub const PARM_L2_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W2 as u32;
+    pub const PARM_L2_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W4 as u32;
+    pub const PARM_L2_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W8 as u32;
+    pub const PARM_L2_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W2 as u32;
+    pub const PARM_L2_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W4 as u32;
+    pub const PARM_L2_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W8 as u32;
+    pub const PARM_L2_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W2 as u32;
+    pub const PARM_L2_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W4 as u32;
+    pub const PARM_L2_H15_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W8 as u32;
+    pub const PARM_L2_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W2 as u32;
+    pub const PARM_L2_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W4 as u32;
+    pub const PARM_L2_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W8 as u32;
+    pub const PARM_L3_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W2 as u32;
+    pub const PARM_L3_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W4 as u32;
+    pub const PARM_L3_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W8 as u32;
+    pub const PARM_L3_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H10_W4 as u32;
+    pub const PARM_L3_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H10_W8 as u32;
+    pub const PARM_L4_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W2 as u32;
+    pub const PARM_L4_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W4 as u32;
+    pub const PARM_L4_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W8 as u32;
+    pub const PARM_L4_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H10_W4 as u32;
+    pub const PARM_L4_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H10_W8 as u32;
+}
+
+#[cfg(lms_sha256_192)]
+impl Lms {
+    pub const PARM_SHA256_192_L1_H5_W1 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W1  as u32;
+    pub const PARM_SHA256_192_L1_H5_W2 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W2  as u32;
+    pub const PARM_SHA256_192_L1_H5_W4 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W4  as u32;
+    pub const PARM_SHA256_192_L1_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W8  as u32;
+    pub const PARM_SHA256_192_L1_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W2 as u32;
+    pub const PARM_SHA256_192_L1_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W4 as u32;
+    pub const PARM_SHA256_192_L1_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W8 as u32;
+    pub const PARM_SHA256_192_L1_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H15_W2 as u32;
+    pub const PARM_SHA256_192_L1_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H15_W4 as u32;
+    pub const PARM_SHA256_192_L1_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W2 as u32;
+    pub const PARM_SHA256_192_L1_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W4 as u32;
+    pub const PARM_SHA256_192_L1_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W8 as u32;
+    pub const PARM_SHA256_192_L2_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W2 as u32;
+    pub const PARM_SHA256_192_L2_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W4 as u32;
+    pub const PARM_SHA256_192_L2_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W8 as u32;
+    pub const PARM_SHA256_192_L3_H5_W2 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W2  as u32;
+    pub const PARM_SHA256_192_L3_H5_W4 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W4  as u32;
+    pub const PARM_SHA256_192_L3_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W8  as u32;
+    pub const PARM_SHA256_192_L3_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H10_W4 as u32;
+    pub const PARM_SHA256_192_L4_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L4_H5_W8  as u32;
 }
 
 impl Lms {
@@ -177,8 +239,8 @@ impl Lms {
 
     /// Set parameters using a predefined `wc_LmsParm` parameter set.
     ///
-    /// Use `sys::wc_LmsParm_WC_LMS_PARM_*` constants for the `parm` value
-    /// (e.g., `sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32`).
+    /// Use `Lms::PARM_*` constants for the `parm` value (e.g.,
+    /// `Lms::PARM_L1_H5_W8`).
     ///
     /// # Parameters
     ///
@@ -197,8 +259,7 @@ impl Lms {
     /// use wolfssl_wolfcrypt::lms::Lms;
     /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
-    /// key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    ///     .expect("Error with set_parm()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// }
     /// ```
     pub fn set_parm(&mut self, parm: u32) -> Result<(), i32> {
@@ -377,8 +438,7 @@ impl Lms {
     /// use wolfssl_wolfcrypt::sys;
     /// let mut rng = RNG::new().expect("Error creating RNG");
     /// let mut key = Lms::new().expect("Error with Lms::new()");
-    /// key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    ///     .expect("Error with set_parm()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// // Register write/read callbacks before calling make_key().
     /// // key.make_key(&mut rng).expect("Error with make_key()");
     /// }
@@ -454,8 +514,7 @@ impl Lms {
     /// use wolfssl_wolfcrypt::sys;
     /// let mut rng = RNG::new().expect("Error creating RNG");
     /// let mut key = Lms::new().expect("Error with Lms::new()");
-    /// key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    ///     .expect("Error with set_parm()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// // Register callbacks and make key first (omitted for brevity).
     /// // let sig_len = key.get_sig_len().unwrap();
     /// // let mut sig = vec![0u8; sig_len];
@@ -520,8 +579,7 @@ impl Lms {
     /// use wolfssl_wolfcrypt::lms::Lms;
     /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
-    /// key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    ///     .expect("Error with set_parm()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// let sig_len = key.get_sig_len().expect("Error with get_sig_len()");
     /// assert!(sig_len > 0);
     /// }
@@ -550,8 +608,7 @@ impl Lms {
     /// use wolfssl_wolfcrypt::lms::Lms;
     /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
-    /// key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    ///     .expect("Error with set_parm()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// let pub_len = key.get_pub_len().expect("Error with get_pub_len()");
     /// assert!(pub_len > 0);
     /// }
@@ -610,8 +667,7 @@ impl Lms {
     /// use wolfssl_wolfcrypt::lms::Lms;
     /// use wolfssl_wolfcrypt::sys;
     /// let mut key = Lms::new().expect("Error with Lms::new()");
-    /// key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-    ///     .expect("Error with set_parm()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     /// // After make_key():
     /// // let pub_len = key.get_pub_len().unwrap();
     /// // let mut pub_buf = vec![0u8; pub_len];

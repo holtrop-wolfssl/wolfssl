@@ -27,12 +27,6 @@ use wolfssl_wolfcrypt::sys;
 #[cfg(all(lms_make_key, random))]
 use wolfssl_wolfcrypt::random::RNG;
 
-/// Fast, small parameter set used across signing tests. L1/H5/W8 produces
-/// 32 available signatures (2^5) and the smallest LMS signatures in the
-/// standard parameter table.
-#[cfg(lms_make_key)]
-const TEST_PARM: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32;
-
 /// Private key NV storage for tests that require make_key / sign / reload.
 ///
 /// The write and read callbacks use a raw pointer to this struct as the
@@ -107,8 +101,7 @@ fn test_new_ex() {
 fn test_set_parm() {
     common::setup();
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-        .expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
 }
 
 /// Verify that `set_parameters()` accepts explicit L/H/W values and that
@@ -136,9 +129,9 @@ fn test_set_get_parameters() {
 fn test_size_queries_after_set_parm() {
     common::setup();
     for &parm in &[
-        sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32,
-        sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W4 as u32,
-        sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W8 as u32,
+        Lms::PARM_L1_H5_W8,
+        Lms::PARM_L1_H5_W4,
+        Lms::PARM_L1_H10_W8,
     ] {
         let mut key = Lms::new().expect("Error with Lms::new()");
         key.set_parm(parm).expect("Error with set_parm()");
@@ -155,13 +148,11 @@ fn test_size_queries_after_set_parm() {
 fn test_sig_len_increases_with_levels() {
     common::setup();
     let mut key1 = Lms::new().expect("Error with Lms::new()");
-    key1.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32)
-        .expect("Error with set_parm()");
+    key1.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     let sig_len_l1 = key1.get_sig_len().expect("Error with get_sig_len() L1");
 
     let mut key2 = Lms::new().expect("Error with Lms::new()");
-    key2.set_parm(sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W8 as u32)
-        .expect("Error with set_parm()");
+    key2.set_parm(Lms::PARM_L2_H5_W8).expect("Error with set_parm()");
     let sig_len_l2 = key2.get_sig_len().expect("Error with get_sig_len() L2");
 
     assert!(
@@ -183,7 +174,7 @@ fn test_sig_len_increases_with_levels() {
 fn test_get_priv_len() {
     common::setup();
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     let priv_len = key.get_priv_len().expect("Error with get_priv_len()");
     assert!(priv_len > 0, "priv_len must be positive");
 }
@@ -202,7 +193,7 @@ fn test_make_key() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -219,7 +210,7 @@ fn test_sign_verify() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -245,7 +236,7 @@ fn test_sign_tampered_message() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -270,7 +261,7 @@ fn test_sign_tampered_signature() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -299,7 +290,7 @@ fn test_export_pub_raw_import_verify() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut sign_key = Lms::new().expect("Error with Lms::new()");
-    sign_key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    sign_key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut sign_key, ctx);
     sign_key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -318,7 +309,7 @@ fn test_export_pub_raw_import_verify() {
     // Import the raw public key into a new key and verify.
     // wc_LmsKey_ImportPubRaw requires params to be set first.
     let mut verify_key = Lms::new().expect("Error with Lms::new() for verify");
-    verify_key.set_parm(TEST_PARM).expect("Error with set_parm() for verify key");
+    verify_key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm() for verify key");
     verify_key.import_pub_raw(&pub_buf)
         .expect("Error with import_pub_raw()");
     verify_key.verify(&sig, message)
@@ -338,7 +329,7 @@ fn test_export_pub_from() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut sign_key = Lms::new().expect("Error with Lms::new()");
-    sign_key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    sign_key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut sign_key, ctx);
     sign_key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -349,7 +340,7 @@ fn test_export_pub_from() {
 
     // Copy the public portion into a fresh key.
     let mut verify_key = Lms::new().expect("Error with Lms::new() for verify");
-    verify_key.set_parm(TEST_PARM).expect("Error with set_parm() for verify key");
+    verify_key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm() for verify key");
     verify_key.export_pub_from(&sign_key)
         .expect("Error with export_pub_from()");
 
@@ -370,7 +361,7 @@ fn test_sigs_left_after_make_key() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -391,7 +382,7 @@ fn test_get_kid() {
     let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
 
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -413,7 +404,7 @@ fn test_reload() {
 
     // Generate a key pair and export the public key.
     let mut key = Lms::new().expect("Error with Lms::new()");
-    key.set_parm(TEST_PARM).expect("Error with set_parm()");
+    key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm()");
     setup_callbacks(&mut key, ctx);
     key.make_key(&mut rng).expect("Error with make_key()");
 
@@ -423,7 +414,7 @@ fn test_reload() {
 
     // Create a new key, reload from NV storage (written by make_key above).
     let mut reloaded = Lms::new().expect("Error with Lms::new() for reload");
-    reloaded.set_parm(TEST_PARM).expect("Error with set_parm() for reload");
+    reloaded.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm() for reload");
     setup_callbacks(&mut reloaded, ctx);
     reloaded.reload().expect("Error with reload()");
 
@@ -435,7 +426,7 @@ fn test_reload() {
 
     let mut verify_key = Lms::new().expect("Error with Lms::new() for verify");
     // wc_LmsKey_ImportPubRaw requires params to be set first.
-    verify_key.set_parm(TEST_PARM).expect("Error with set_parm() for verify key");
+    verify_key.set_parm(Lms::PARM_L1_H5_W8).expect("Error with set_parm() for verify key");
     verify_key.import_pub_raw(&pub_buf).expect("Error with import_pub_raw()");
     verify_key.verify(&sig, message)
         .expect("Signature from reloaded key must verify");
@@ -452,9 +443,9 @@ fn test_sign_verify_multiple_parms() {
     let mut rng = RNG::new().expect("Error creating RNG");
 
     for &parm in &[
-        sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32,
-        sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W4 as u32,
-        sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W2 as u32,
+        Lms::PARM_L1_H5_W8,
+        Lms::PARM_L1_H5_W4,
+        Lms::PARM_L1_H5_W2,
     ] {
         let mut store = Box::new(KeyStore { buf: [0u8; 16384] });
         let ctx = store.as_mut() as *mut KeyStore as *mut core::ffi::c_void;
