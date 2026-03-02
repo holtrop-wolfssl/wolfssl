@@ -366,7 +366,7 @@ fn test_sigs_left_after_make_key() {
     key.make_key(&mut rng).expect("Error with make_key()");
 
     let remaining = key.sigs_left().expect("Error with sigs_left()");
-    assert!(remaining > 0, "sigs_left must be positive immediately after make_key()");
+    assert!(remaining, "sigs_left must be true immediately after make_key()");
 
     let _ = store;
 }

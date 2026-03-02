@@ -108,66 +108,66 @@ pub struct Lms {
 
 #[cfg(lms_sha256_256)]
 impl Lms {
-    pub const PARM_NONE: u32 = sys::wc_LmsParm_WC_LMS_PARM_NONE as u32;
-    pub const PARM_L1_H5_W1: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W1 as u32;
-    pub const PARM_L1_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W2 as u32;
-    pub const PARM_L1_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W4 as u32;
-    pub const PARM_L1_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8 as u32;
-    pub const PARM_L1_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W2 as u32;
-    pub const PARM_L1_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W4 as u32;
-    pub const PARM_L1_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W8 as u32;
-    pub const PARM_L1_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W2 as u32;
-    pub const PARM_L1_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W4 as u32;
-    pub const PARM_L1_H15_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W8 as u32;
-    pub const PARM_L1_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W2 as u32;
-    pub const PARM_L1_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W4 as u32;
-    pub const PARM_L1_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W8 as u32;
-    pub const PARM_L2_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W2 as u32;
-    pub const PARM_L2_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W4 as u32;
-    pub const PARM_L2_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W8 as u32;
-    pub const PARM_L2_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W2 as u32;
-    pub const PARM_L2_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W4 as u32;
-    pub const PARM_L2_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W8 as u32;
-    pub const PARM_L2_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W2 as u32;
-    pub const PARM_L2_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W4 as u32;
-    pub const PARM_L2_H15_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W8 as u32;
-    pub const PARM_L2_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W2 as u32;
-    pub const PARM_L2_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W4 as u32;
-    pub const PARM_L2_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W8 as u32;
-    pub const PARM_L3_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W2 as u32;
-    pub const PARM_L3_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W4 as u32;
-    pub const PARM_L3_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W8 as u32;
-    pub const PARM_L3_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H10_W4 as u32;
-    pub const PARM_L3_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H10_W8 as u32;
-    pub const PARM_L4_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W2 as u32;
-    pub const PARM_L4_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W4 as u32;
-    pub const PARM_L4_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W8 as u32;
-    pub const PARM_L4_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H10_W4 as u32;
-    pub const PARM_L4_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H10_W8 as u32;
+    pub const PARM_NONE: u32 = sys::wc_LmsParm_WC_LMS_PARM_NONE;
+    pub const PARM_L1_H5_W1: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W1;
+    pub const PARM_L1_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W2;
+    pub const PARM_L1_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W4;
+    pub const PARM_L1_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H5_W8;
+    pub const PARM_L1_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W2;
+    pub const PARM_L1_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W4;
+    pub const PARM_L1_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H10_W8;
+    pub const PARM_L1_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W2;
+    pub const PARM_L1_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W4;
+    pub const PARM_L1_H15_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H15_W8;
+    pub const PARM_L1_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W2;
+    pub const PARM_L1_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W4;
+    pub const PARM_L1_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L1_H20_W8;
+    pub const PARM_L2_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W2;
+    pub const PARM_L2_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W4;
+    pub const PARM_L2_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H5_W8;
+    pub const PARM_L2_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W2;
+    pub const PARM_L2_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W4;
+    pub const PARM_L2_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H10_W8;
+    pub const PARM_L2_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W2;
+    pub const PARM_L2_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W4;
+    pub const PARM_L2_H15_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H15_W8;
+    pub const PARM_L2_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W2;
+    pub const PARM_L2_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W4;
+    pub const PARM_L2_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L2_H20_W8;
+    pub const PARM_L3_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W2;
+    pub const PARM_L3_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W4;
+    pub const PARM_L3_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H5_W8;
+    pub const PARM_L3_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H10_W4;
+    pub const PARM_L3_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L3_H10_W8;
+    pub const PARM_L4_H5_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W2;
+    pub const PARM_L4_H5_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W4;
+    pub const PARM_L4_H5_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H5_W8;
+    pub const PARM_L4_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H10_W4;
+    pub const PARM_L4_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_L4_H10_W8;
 }
 
 #[cfg(lms_sha256_192)]
 impl Lms {
-    pub const PARM_SHA256_192_L1_H5_W1 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W1  as u32;
-    pub const PARM_SHA256_192_L1_H5_W2 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W2  as u32;
-    pub const PARM_SHA256_192_L1_H5_W4 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W4  as u32;
-    pub const PARM_SHA256_192_L1_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W8  as u32;
-    pub const PARM_SHA256_192_L1_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W2 as u32;
-    pub const PARM_SHA256_192_L1_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W4 as u32;
-    pub const PARM_SHA256_192_L1_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W8 as u32;
-    pub const PARM_SHA256_192_L1_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H15_W2 as u32;
-    pub const PARM_SHA256_192_L1_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H15_W4 as u32;
-    pub const PARM_SHA256_192_L1_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W2 as u32;
-    pub const PARM_SHA256_192_L1_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W4 as u32;
-    pub const PARM_SHA256_192_L1_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W8 as u32;
-    pub const PARM_SHA256_192_L2_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W2 as u32;
-    pub const PARM_SHA256_192_L2_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W4 as u32;
-    pub const PARM_SHA256_192_L2_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W8 as u32;
-    pub const PARM_SHA256_192_L3_H5_W2 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W2  as u32;
-    pub const PARM_SHA256_192_L3_H5_W4 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W4  as u32;
-    pub const PARM_SHA256_192_L3_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W8  as u32;
-    pub const PARM_SHA256_192_L3_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H10_W4 as u32;
-    pub const PARM_SHA256_192_L4_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L4_H5_W8  as u32;
+    pub const PARM_SHA256_192_L1_H5_W1 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W1;
+    pub const PARM_SHA256_192_L1_H5_W2 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W2;
+    pub const PARM_SHA256_192_L1_H5_W4 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W4;
+    pub const PARM_SHA256_192_L1_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H5_W8;
+    pub const PARM_SHA256_192_L1_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W2;
+    pub const PARM_SHA256_192_L1_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W4;
+    pub const PARM_SHA256_192_L1_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H10_W8;
+    pub const PARM_SHA256_192_L1_H15_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H15_W2;
+    pub const PARM_SHA256_192_L1_H15_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H15_W4;
+    pub const PARM_SHA256_192_L1_H20_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W2;
+    pub const PARM_SHA256_192_L1_H20_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W4;
+    pub const PARM_SHA256_192_L1_H20_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L1_H20_W8;
+    pub const PARM_SHA256_192_L2_H10_W2: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W2;
+    pub const PARM_SHA256_192_L2_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W4;
+    pub const PARM_SHA256_192_L2_H10_W8: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L2_H10_W8;
+    pub const PARM_SHA256_192_L3_H5_W2 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W2;
+    pub const PARM_SHA256_192_L3_H5_W4 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W4;
+    pub const PARM_SHA256_192_L3_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H5_W8;
+    pub const PARM_SHA256_192_L3_H10_W4: u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L3_H10_W4;
+    pub const PARM_SHA256_192_L4_H5_W8 : u32 = sys::wc_LmsParm_WC_LMS_PARM_SHA256_192_L4_H5_W8;
 }
 
 impl Lms {
@@ -546,7 +546,7 @@ impl Lms {
 
     /// Return the number of signatures remaining for this key.
     ///
-    /// Returns `Ok(1)` if at least one signature remains, `Ok(0)` if
+    /// Returns `Ok(true)` if at least one signature remains, `Ok(false)` if
     /// exhausted, or `Err(e)` on error. This is a conservative check only.
     ///
     /// # Returns
@@ -554,12 +554,12 @@ impl Lms {
     /// Returns either Ok(count) on success or Err(e) containing the wolfSSL
     /// library error code value.
     #[cfg(lms_make_key)]
-    pub fn sigs_left(&mut self) -> Result<i32, i32> {
+    pub fn sigs_left(&mut self) -> Result<bool, i32> {
         let rc = unsafe { sys::wc_LmsKey_SigsLeft(&mut self.ws_key) };
         if rc < 0 {
             return Err(rc);
         }
-        Ok(rc)
+        Ok(rc != 0)
     }
 
     /// Get the signature length in bytes for this key's parameters.
