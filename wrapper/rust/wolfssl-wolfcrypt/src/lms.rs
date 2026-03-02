@@ -698,14 +698,10 @@ impl Lms {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// #[cfg(all(lms, lms_make_key, random))]
-    /// {
-    /// use wolfssl_wolfcrypt::lms::Lms;
-    /// // After exporting:
-    /// // let mut vkey = Lms::new().expect("Error with Lms::new()");
-    /// // vkey.import_pub_raw(&pub_buf).expect("Error with import_pub_raw()");
-    /// }
+    /// ```rust,ignore
+    /// let mut key = Lms::new().expect("Error with Lms::new()");
+    /// key.set_parm(Lms::PARM_L1_H5_W8).expect("set_parm failed");
+    /// key.import_pub_raw(&pub_buf).expect("Error with import_pub_raw()");
     /// ```
     pub fn import_pub_raw(&mut self, data: &[u8]) -> Result<(), i32> {
         let rc = unsafe {
@@ -732,17 +728,6 @@ impl Lms {
     /// Returns either Ok(()) if the signature is valid, or Err(e) containing
     /// the wolfSSL library error code value (including a verification failure
     /// code).
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// #[cfg(all(lms, lms_make_key, random))]
-    /// {
-    /// use wolfssl_wolfcrypt::lms::Lms;
-    /// // After sign() and import_pub_raw():
-    /// // vkey.verify(&sig, b"hello").expect("Error with verify()");
-    /// }
-    /// ```
     pub fn verify(&mut self, sig: &[u8], msg: &[u8]) -> Result<(), i32> {
         // wc_lms.c validates sigSz, but ext_lms.c passes sigSz through to
         // hss_validate_signature without checking it. Validate here for both.
@@ -767,8 +752,7 @@ impl Lms {
 
     /// Get the Key ID (I value) for this LMS/HSS key.
     ///
-    /// Returns a slice pointing into the key's internal storage. The slice
-    /// is valid for the lifetime of the borrow.
+    /// Returns a slice pointing into the key's internal storage.
     ///
     /// # Returns
     ///
