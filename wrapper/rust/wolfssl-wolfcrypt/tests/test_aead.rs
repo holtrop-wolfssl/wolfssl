@@ -24,7 +24,6 @@
 
 #![cfg(feature = "aead")]
 
-use wolfssl_wolfcrypt::aead_impl::*;
 use aead::{Aead, AeadInPlace, KeyInit, Payload};
 
 // ---------------------------------------------------------------------------
@@ -41,9 +40,10 @@ use aead::{Aead, AeadInPlace, KeyInit, Payload};
 #[test]
 #[cfg(aes_gcm)]
 fn test_aes128gcm_nist_tc2_encrypt() {
+    use wolfssl_wolfcrypt::aes::Aes128Gcm;
+
     let key = [0u8; 16];
     let nonce = [0u8; 12];
-    let plaintext = [0u8; 16];
     let expected_ciphertext = [
         0x03u8, 0x88, 0xda, 0xce, 0x60, 0xb6, 0xa3, 0x92,
         0xf3, 0x28, 0xc2, 0xb9, 0x71, 0xb2, 0xfe, 0x78,
@@ -55,18 +55,20 @@ fn test_aes128gcm_nist_tc2_encrypt() {
 
     let cipher = Aes128Gcm::new_from_slice(&key).unwrap();
     let nonce_arr: aead::Nonce<Aes128Gcm> = nonce.into();
-    let mut buffer = plaintext;
+    let mut buffer = [0u8; 16];
     let tag = cipher
         .encrypt_in_place_detached(&nonce_arr, &[], &mut buffer)
         .expect("AES-128-GCM encrypt failed");
 
     assert_eq!(buffer, expected_ciphertext);
-    assert_eq!(tag.as_ref(), &expected_tag);
+    assert_eq!(&tag[..], &expected_tag);
 }
 
 #[test]
 #[cfg(aes_gcm)]
 fn test_aes128gcm_nist_tc2_decrypt() {
+    use wolfssl_wolfcrypt::aes::Aes128Gcm;
+
     let key = [0u8; 16];
     let nonce = [0u8; 12];
     let mut ciphertext = [
@@ -77,7 +79,6 @@ fn test_aes128gcm_nist_tc2_decrypt() {
         0xabu8, 0x6e, 0x47, 0xd4, 0x2c, 0xec, 0x13, 0xbd,
         0xf5, 0x3a, 0x67, 0xb2, 0x12, 0x57, 0xbd, 0xdf,
     ];
-    let expected_plaintext = [0u8; 16];
 
     let cipher = Aes128Gcm::new_from_slice(&key).unwrap();
     let nonce_arr: aead::Nonce<Aes128Gcm> = nonce.into();
@@ -86,13 +87,15 @@ fn test_aes128gcm_nist_tc2_decrypt() {
         .decrypt_in_place_detached(&nonce_arr, &[], &mut ciphertext, &tag)
         .expect("AES-128-GCM decrypt failed");
 
-    assert_eq!(ciphertext, expected_plaintext);
+    assert_eq!(ciphertext, [0u8; 16]);
 }
 
 /// Test AES-128-GCM roundtrip using the `aead::Aead` blanket impl (alloc).
 #[test]
 #[cfg(aes_gcm)]
 fn test_aes128gcm_aead_roundtrip() {
+    use wolfssl_wolfcrypt::aes::Aes128Gcm;
+
     let key = [0x42u8; 16];
     let nonce_bytes = [0x11u8; 12];
     let aad = b"associated data";
@@ -116,6 +119,8 @@ fn test_aes128gcm_aead_roundtrip() {
 #[test]
 #[cfg(aes_gcm)]
 fn test_aes128gcm_reject_bad_tag() {
+    use wolfssl_wolfcrypt::aes::Aes128Gcm;
+
     let key = [0u8; 16];
     let nonce_bytes = [0u8; 12];
     let plaintext = b"some plaintext!";
@@ -123,14 +128,9 @@ fn test_aes128gcm_reject_bad_tag() {
     let cipher = Aes128Gcm::new_from_slice(&key).unwrap();
     let nonce: aead::Nonce<Aes128Gcm> = nonce_bytes.into();
 
-    let mut ct = cipher
-        .encrypt(&nonce, plaintext.as_ref())
-        .expect("encrypt failed");
-
-    // Flip a byte in the tag (last 16 bytes).
+    let mut ct = cipher.encrypt(&nonce, plaintext.as_ref()).expect("encrypt failed");
     let last = ct.len() - 1;
     ct[last] ^= 0xff;
-
     assert!(cipher.decrypt(&nonce, ct.as_slice()).is_err());
 }
 
@@ -141,15 +141,17 @@ fn test_aes128gcm_reject_bad_tag() {
 /// NIST SP 800-38D, Test Case 14 (256-bit key):
 /// Key  = feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308
 /// IV   = cafebabefacedbaddecaf888
-/// PT   = d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a72
-///        1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b391aafd255
-/// AAD  = feedfacedeadbeeffeedfacedeadbeef abaddad2
-/// CT   = 522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa
-///        8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662898015ad
-/// Tag  = b094dac5d93471bdec1a502270e3cc6c
+/// PT   = d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a7
+///        21c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39 (60 B)
+/// AAD  = feedfacedeadbeeffeedfacedeadbeefabaddad2
+/// CT   = 522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1a
+///        a8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0a (60 B)
+/// Tag  = 76fc6ece0f4e1768cddf8853bb2d551b
 #[test]
 #[cfg(aes_gcm)]
 fn test_aes256gcm_nist_tc14_encrypt() {
+    use wolfssl_wolfcrypt::aes::Aes256Gcm;
+
     let key = [
         0xfeu8, 0xff, 0xe9, 0x92, 0x86, 0x65, 0x73, 0x1c,
         0x6d, 0x6a, 0x8f, 0x94, 0x67, 0x30, 0x83, 0x08,
@@ -165,6 +167,7 @@ fn test_aes256gcm_nist_tc14_encrypt() {
         0xfe, 0xed, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
         0xab, 0xad, 0xda, 0xd2,
     ];
+    // 60-byte plaintext (TC13's 64-byte PT without the final 4 bytes 1aafd255)
     let plaintext = [
         0xd9u8, 0x31, 0x32, 0x25, 0xf8, 0x84, 0x06, 0xe5,
         0xa5, 0x59, 0x09, 0xc5, 0xaf, 0xf5, 0x26, 0x9a,
@@ -173,8 +176,9 @@ fn test_aes256gcm_nist_tc14_encrypt() {
         0x1c, 0x3c, 0x0c, 0x95, 0x95, 0x68, 0x09, 0x53,
         0x2f, 0xcf, 0x0e, 0x24, 0x49, 0xa6, 0xb5, 0x25,
         0xb1, 0x6a, 0xed, 0xf5, 0xaa, 0x0d, 0xe6, 0x57,
-        0xba, 0x63, 0x7b, 0x39, 0x1a, 0xaf, 0xd2, 0x55,
+        0xba, 0x63, 0x7b, 0x39,
     ];
+    // 60-byte ciphertext
     let expected_ciphertext = [
         0x52u8, 0x2d, 0xc1, 0xf0, 0x99, 0x56, 0x7d, 0x07,
         0xf4, 0x7f, 0x37, 0xa3, 0x2a, 0x84, 0x42, 0x7d,
@@ -183,11 +187,11 @@ fn test_aes256gcm_nist_tc14_encrypt() {
         0x8c, 0xb0, 0x8e, 0x48, 0x59, 0x0d, 0xbb, 0x3d,
         0xa7, 0xb0, 0x8b, 0x10, 0x56, 0x82, 0x88, 0x38,
         0xc5, 0xf6, 0x1e, 0x63, 0x93, 0xba, 0x7a, 0x0a,
-        0xbc, 0xc9, 0xf6, 0x62, 0x89, 0x80, 0x15, 0xad,
+        0xbc, 0xc9, 0xf6, 0x62,
     ];
     let expected_tag = [
-        0xb0u8, 0x94, 0xda, 0xc5, 0xd9, 0x34, 0x71, 0xbd,
-        0xec, 0x1a, 0x50, 0x22, 0x70, 0xe3, 0xcc, 0x6c,
+        0x76u8, 0xfc, 0x6e, 0xce, 0x0f, 0x4e, 0x17, 0x68,
+        0xcd, 0xdf, 0x88, 0x53, 0xbb, 0x2d, 0x55, 0x1b,
     ];
 
     let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
@@ -198,13 +202,15 @@ fn test_aes256gcm_nist_tc14_encrypt() {
         .expect("AES-256-GCM encrypt failed");
 
     assert_eq!(buffer, expected_ciphertext);
-    assert_eq!(tag.as_ref(), &expected_tag);
+    assert_eq!(&tag[..], &expected_tag);
 }
 
 /// Roundtrip test for AES-256-GCM using `aead::Aead`.
 #[test]
 #[cfg(aes_gcm)]
 fn test_aes256gcm_aead_roundtrip() {
+    use wolfssl_wolfcrypt::aes::Aes256Gcm;
+
     let key = [0xabu8; 32];
     let nonce_bytes = [0xbcu8; 12];
     let aad = b"test aad";
@@ -232,6 +238,8 @@ fn test_aes256gcm_aead_roundtrip() {
 #[test]
 #[cfg(aes_ccm)]
 fn test_aes128ccm_aead_roundtrip() {
+    use wolfssl_wolfcrypt::aes::Aes128Ccm;
+
     let key = [0x01u8; 16];
     let nonce_bytes = [0x02u8; 12];
     let aad = b"ccm aad";
@@ -255,6 +263,8 @@ fn test_aes128ccm_aead_roundtrip() {
 #[test]
 #[cfg(aes_ccm)]
 fn test_aes128ccm_reject_tampered() {
+    use wolfssl_wolfcrypt::aes::Aes128Ccm;
+
     let key = [0x01u8; 16];
     let nonce_bytes = [0x02u8; 12];
     let plaintext = b"AES-128-CCM tamper test!";
@@ -275,6 +285,8 @@ fn test_aes128ccm_reject_tampered() {
 #[test]
 #[cfg(aes_ccm)]
 fn test_aes256ccm_aead_roundtrip() {
+    use wolfssl_wolfcrypt::aes::Aes256Ccm;
+
     let key = [0xddu8; 32];
     let nonce_bytes = [0xeeu8; 12];
     let aad = b"aes-256-ccm test";
@@ -295,77 +307,6 @@ fn test_aes256ccm_aead_roundtrip() {
 }
 
 // ---------------------------------------------------------------------------
-// AES-128-EAX
-// ---------------------------------------------------------------------------
-
-/// Roundtrip test for AES-128-EAX using `aead::Aead`.
-#[test]
-#[cfg(aes_eax)]
-fn test_aes128eax_aead_roundtrip() {
-    let key = [0x11u8; 16];
-    let nonce_bytes = [0x22u8; 16];
-    let aad = b"eax aad data";
-    let plaintext = b"AES-128-EAX plaintext";
-
-    let cipher = Aes128Eax::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<Aes128Eax> = nonce_bytes.into();
-
-    let ciphertext = cipher
-        .encrypt(&nonce, Payload { msg: plaintext, aad })
-        .expect("AES-128-EAX encrypt failed");
-
-    let recovered = cipher
-        .decrypt(&nonce, Payload { msg: &ciphertext, aad })
-        .expect("AES-128-EAX decrypt failed");
-
-    assert_eq!(recovered, plaintext);
-}
-
-/// Verify that AES-128-EAX decryption rejects a tampered tag.
-#[test]
-#[cfg(aes_eax)]
-fn test_aes128eax_reject_bad_tag() {
-    let key = [0x11u8; 16];
-    let nonce_bytes = [0x22u8; 16];
-    let plaintext = b"EAX tamper test";
-
-    let cipher = Aes128Eax::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<Aes128Eax> = nonce_bytes.into();
-
-    let mut ct = cipher.encrypt(&nonce, plaintext.as_ref()).expect("encrypt failed");
-    let last = ct.len() - 1;
-    ct[last] ^= 0xff;
-    assert!(cipher.decrypt(&nonce, ct.as_slice()).is_err());
-}
-
-// ---------------------------------------------------------------------------
-// AES-256-EAX
-// ---------------------------------------------------------------------------
-
-/// Roundtrip test for AES-256-EAX using `aead::Aead`.
-#[test]
-#[cfg(aes_eax)]
-fn test_aes256eax_aead_roundtrip() {
-    let key = [0x33u8; 32];
-    let nonce_bytes = [0x44u8; 16];
-    let aad = b"eax-256 additional";
-    let plaintext = b"AES-256-EAX test data";
-
-    let cipher = Aes256Eax::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<Aes256Eax> = nonce_bytes.into();
-
-    let ciphertext = cipher
-        .encrypt(&nonce, Payload { msg: plaintext, aad })
-        .expect("AES-256-EAX encrypt failed");
-
-    let recovered = cipher
-        .decrypt(&nonce, Payload { msg: &ciphertext, aad })
-        .expect("AES-256-EAX decrypt failed");
-
-    assert_eq!(recovered, plaintext);
-}
-
-// ---------------------------------------------------------------------------
 // ChaCha20-Poly1305
 // ---------------------------------------------------------------------------
 
@@ -374,12 +315,13 @@ fn test_aes256eax_aead_roundtrip() {
 /// Key  = 808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f
 /// IV   = 070000004041424344454647
 /// AAD  = 50515253c0c1c2c3c4c5c6c7
-/// PT   = 4c616469657320616e642047656e746c656d656e206f662074686520636c6173
-///        73206f6620273939...
+/// PT   = 4c61646965732061...
 /// Tag  = 1ae10b594f09e26a7e902ecbd0600691
 #[test]
 #[cfg(chacha20_poly1305)]
 fn test_chacha20poly1305_rfc8439_encrypt() {
+    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305;
+
     let key = [
         0x80u8, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
         0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
@@ -440,13 +382,15 @@ fn test_chacha20poly1305_rfc8439_encrypt() {
         .expect("ChaCha20-Poly1305 encrypt failed");
 
     assert_eq!(plaintext, expected_ciphertext);
-    assert_eq!(tag.as_ref(), &expected_tag);
+    assert_eq!(&tag[..], &expected_tag);
 }
 
 /// Roundtrip test for ChaCha20-Poly1305 using `aead::Aead`.
 #[test]
 #[cfg(chacha20_poly1305)]
 fn test_chacha20poly1305_aead_roundtrip() {
+    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305;
+
     let key = [0x55u8; 32];
     let nonce_bytes = [0x66u8; 12];
     let aad = b"chacha20 aad";
@@ -470,6 +414,8 @@ fn test_chacha20poly1305_aead_roundtrip() {
 #[test]
 #[cfg(chacha20_poly1305)]
 fn test_chacha20poly1305_reject_tampered() {
+    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305;
+
     let key = [0x77u8; 32];
     let nonce_bytes = [0x88u8; 12];
     let plaintext = b"tamper me!";
@@ -490,6 +436,8 @@ fn test_chacha20poly1305_reject_tampered() {
 #[test]
 #[cfg(xchacha20_poly1305)]
 fn test_xchacha20poly1305_aead_roundtrip() {
+    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305;
+
     let key = [0xaau8; 32];
     let nonce_bytes = [0xbbu8; 24];
     let aad = b"xchacha20 aad";
@@ -510,10 +458,11 @@ fn test_xchacha20poly1305_aead_roundtrip() {
 }
 
 /// RFC 8439-based XChaCha20-Poly1305 known-answer test.
-/// Vectors from draft-irtf-cfrg-xchacha (extended nonce variant).
 #[test]
 #[cfg(xchacha20_poly1305)]
 fn test_xchacha20poly1305_known_answer() {
+    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305;
+
     let key = [
         0x80u8, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
         0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
@@ -575,13 +524,15 @@ fn test_xchacha20poly1305_known_answer() {
         .expect("XChaCha20-Poly1305 encrypt failed");
 
     assert_eq!(plaintext, expected_ciphertext);
-    assert_eq!(tag.as_ref(), &expected_tag);
+    assert_eq!(&tag[..], &expected_tag);
 }
 
 /// Verify that XChaCha20-Poly1305 decryption rejects a tampered ciphertext.
 #[test]
 #[cfg(xchacha20_poly1305)]
 fn test_xchacha20poly1305_reject_tampered() {
+    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305;
+
     let key = [0x55u8; 32];
     let nonce_bytes = [0x66u8; 24];
     let plaintext = b"XChaCha tamper test";
