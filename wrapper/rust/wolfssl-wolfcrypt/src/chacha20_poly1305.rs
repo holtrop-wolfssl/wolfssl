@@ -30,9 +30,6 @@ use core::mem::MaybeUninit;
 
 pub struct ChaCha20Poly1305 {
     wc_ccp: sys::ChaChaPoly_Aead,
-    /// Key stored for use by the `aead::KeyInit` + `aead::AeadInPlace` impls.
-    #[cfg(feature = "aead")]
-    key: [u8; 32],
 }
 
 impl ChaCha20Poly1305 {
@@ -158,16 +155,7 @@ impl ChaCha20Poly1305 {
             return Err(rc);
         }
         let wc_ccp = unsafe { wc_ccp.assume_init() };
-        let chacha20poly1305 = ChaCha20Poly1305 {
-            wc_ccp,
-            #[cfg(feature = "aead")]
-            key: {
-                let mut k = [0u8; 32];
-                k.copy_from_slice(key);
-                k
-            },
-        };
-        Ok(chacha20poly1305)
+        Ok(ChaCha20Poly1305 { wc_ccp })
     }
 
     /// Update AAD (additional authenticated data).
@@ -259,43 +247,36 @@ impl ChaCha20Poly1305 {
 // ChaCha20-Poly1305 aead trait implementations
 // ---------------------------------------------------------------------------
 
+/// ChaCha20-Poly1305 AEAD instance holding a key for use with the
+/// `aead::KeyInit` and `aead::AeadInPlace` traits.
 #[cfg(feature = "aead")]
-impl aead::KeySizeUser for ChaCha20Poly1305 {
+pub struct ChaCha20Poly1305Aead {
+    key: [u8; 32],
+}
+
+#[cfg(feature = "aead")]
+impl aead::KeySizeUser for ChaCha20Poly1305Aead {
     type KeySize = aead::generic_array::typenum::U32;
 }
 
 #[cfg(feature = "aead")]
-impl aead::AeadCore for ChaCha20Poly1305 {
+impl aead::AeadCore for ChaCha20Poly1305Aead {
     type NonceSize = aead::generic_array::typenum::U12;
     type TagSize = aead::generic_array::typenum::U16;
     type CiphertextOverhead = aead::generic_array::typenum::U0;
 }
 
-/// Construct a `ChaCha20Poly1305` holding just the key for use with the
-/// `aead::AeadInPlace` trait.  The streaming `wc_ccp` context is
-/// initialised with a placeholder nonce; only the key portion is used by
-/// the one-shot `AeadInPlace` methods.
 #[cfg(feature = "aead")]
-impl aead::KeyInit for ChaCha20Poly1305 {
+impl aead::KeyInit for ChaCha20Poly1305Aead {
     fn new(key: &aead::Key<Self>) -> Self {
-        let dummy_iv = [0u8; Self::IV_SIZE];
-        let mut wc_ccp = MaybeUninit::<sys::ChaChaPoly_Aead>::uninit();
-        let key_bytes: &[u8] = key;
-        // Ignore the return code; the context is only used as a placeholder.
-        let _ = unsafe {
-            sys::wc_ChaCha20Poly1305_Init(
-                wc_ccp.as_mut_ptr(), key_bytes.as_ptr(), dummy_iv.as_ptr(), 1,
-            )
-        };
-        let wc_ccp = unsafe { wc_ccp.assume_init() };
         let mut k = [0u8; 32];
-        k.copy_from_slice(key_bytes);
-        ChaCha20Poly1305 { wc_ccp, key: k }
+        k.copy_from_slice(key.as_ref());
+        ChaCha20Poly1305Aead { key: k }
     }
 }
 
 #[cfg(feature = "aead")]
-impl aead::AeadInPlace for ChaCha20Poly1305 {
+impl aead::AeadInPlace for ChaCha20Poly1305Aead {
     fn encrypt_in_place_detached(
         &self,
         nonce: &aead::Nonce<Self>,
@@ -349,11 +330,7 @@ impl aead::AeadInPlace for ChaCha20Poly1305 {
 }
 
 #[cfg(xchacha20_poly1305)]
-pub struct XChaCha20Poly1305 {
-    /// Key stored for use by the `aead::KeyInit` + `aead::AeadInPlace` impls.
-    #[cfg(feature = "aead")]
-    key: [u8; 32],
-}
+pub struct XChaCha20Poly1305;
 
 #[cfg(xchacha20_poly1305)]
 impl XChaCha20Poly1305 {
@@ -452,30 +429,36 @@ impl XChaCha20Poly1305 {
 // XChaCha20-Poly1305 aead trait implementations
 // ---------------------------------------------------------------------------
 
+/// XChaCha20-Poly1305 AEAD instance holding a key for use with the
+/// `aead::KeyInit` and `aead::AeadInPlace` traits.
 #[cfg(all(xchacha20_poly1305, feature = "aead"))]
-impl aead::KeySizeUser for XChaCha20Poly1305 {
+pub struct XChaCha20Poly1305Aead {
+    key: [u8; 32],
+}
+
+#[cfg(all(xchacha20_poly1305, feature = "aead"))]
+impl aead::KeySizeUser for XChaCha20Poly1305Aead {
     type KeySize = aead::generic_array::typenum::U32;
 }
 
 #[cfg(all(xchacha20_poly1305, feature = "aead"))]
-impl aead::AeadCore for XChaCha20Poly1305 {
+impl aead::AeadCore for XChaCha20Poly1305Aead {
     type NonceSize = aead::generic_array::typenum::U24;
     type TagSize = aead::generic_array::typenum::U16;
     type CiphertextOverhead = aead::generic_array::typenum::U0;
 }
 
 #[cfg(all(xchacha20_poly1305, feature = "aead"))]
-impl aead::KeyInit for XChaCha20Poly1305 {
+impl aead::KeyInit for XChaCha20Poly1305Aead {
     fn new(key: &aead::Key<Self>) -> Self {
         let mut k = [0u8; 32];
-        let key_bytes: &[u8] = key;
-        k.copy_from_slice(key_bytes);
-        XChaCha20Poly1305 { key: k }
+        k.copy_from_slice(key.as_ref());
+        XChaCha20Poly1305Aead { key: k }
     }
 }
 
 #[cfg(all(xchacha20_poly1305, feature = "aead"))]
-impl aead::AeadInPlace for XChaCha20Poly1305 {
+impl aead::AeadInPlace for XChaCha20Poly1305Aead {
     fn encrypt_in_place_detached(
         &self,
         nonce: &aead::Nonce<Self>,

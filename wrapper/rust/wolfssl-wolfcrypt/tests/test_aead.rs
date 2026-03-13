@@ -320,7 +320,7 @@ fn test_aes256ccm_aead_roundtrip() {
 #[test]
 #[cfg(chacha20_poly1305)]
 fn test_chacha20poly1305_rfc8439_encrypt() {
-    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305;
+    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305Aead;
 
     let key = [
         0x80u8, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
@@ -375,8 +375,8 @@ fn test_chacha20poly1305_rfc8439_encrypt() {
         0x7e, 0x90, 0x2e, 0xcb, 0xd0, 0x60, 0x06, 0x91,
     ];
 
-    let cipher = ChaCha20Poly1305::new_from_slice(&key).unwrap();
-    let nonce_arr: aead::Nonce<ChaCha20Poly1305> = nonce.into();
+    let cipher = ChaCha20Poly1305Aead::new_from_slice(&key).unwrap();
+    let nonce_arr: aead::Nonce<ChaCha20Poly1305Aead> = nonce.into();
     let tag = cipher
         .encrypt_in_place_detached(&nonce_arr, &aad, &mut plaintext)
         .expect("ChaCha20-Poly1305 encrypt failed");
@@ -389,15 +389,15 @@ fn test_chacha20poly1305_rfc8439_encrypt() {
 #[test]
 #[cfg(chacha20_poly1305)]
 fn test_chacha20poly1305_aead_roundtrip() {
-    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305;
+    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305Aead;
 
     let key = [0x55u8; 32];
     let nonce_bytes = [0x66u8; 12];
     let aad = b"chacha20 aad";
     let plaintext = b"ChaCha20-Poly1305 roundtrip";
 
-    let cipher = ChaCha20Poly1305::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<ChaCha20Poly1305> = nonce_bytes.into();
+    let cipher = ChaCha20Poly1305Aead::new_from_slice(&key).unwrap();
+    let nonce: aead::Nonce<ChaCha20Poly1305Aead> = nonce_bytes.into();
 
     let ciphertext = cipher
         .encrypt(&nonce, Payload { msg: plaintext, aad })
@@ -414,14 +414,14 @@ fn test_chacha20poly1305_aead_roundtrip() {
 #[test]
 #[cfg(chacha20_poly1305)]
 fn test_chacha20poly1305_reject_tampered() {
-    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305;
+    use wolfssl_wolfcrypt::chacha20_poly1305::ChaCha20Poly1305Aead;
 
     let key = [0x77u8; 32];
     let nonce_bytes = [0x88u8; 12];
     let plaintext = b"tamper me!";
 
-    let cipher = ChaCha20Poly1305::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<ChaCha20Poly1305> = nonce_bytes.into();
+    let cipher = ChaCha20Poly1305Aead::new_from_slice(&key).unwrap();
+    let nonce: aead::Nonce<ChaCha20Poly1305Aead> = nonce_bytes.into();
 
     let mut ct = cipher.encrypt(&nonce, plaintext.as_ref()).expect("encrypt failed");
     ct[0] ^= 0x01;
@@ -436,15 +436,15 @@ fn test_chacha20poly1305_reject_tampered() {
 #[test]
 #[cfg(xchacha20_poly1305)]
 fn test_xchacha20poly1305_aead_roundtrip() {
-    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305;
+    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305Aead;
 
     let key = [0xaau8; 32];
     let nonce_bytes = [0xbbu8; 24];
     let aad = b"xchacha20 aad";
     let plaintext = b"XChaCha20-Poly1305 roundtrip";
 
-    let cipher = XChaCha20Poly1305::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<XChaCha20Poly1305> = nonce_bytes.into();
+    let cipher = XChaCha20Poly1305Aead::new_from_slice(&key).unwrap();
+    let nonce: aead::Nonce<XChaCha20Poly1305Aead> = nonce_bytes.into();
 
     let ciphertext = cipher
         .encrypt(&nonce, Payload { msg: plaintext, aad })
@@ -461,7 +461,7 @@ fn test_xchacha20poly1305_aead_roundtrip() {
 #[test]
 #[cfg(xchacha20_poly1305)]
 fn test_xchacha20poly1305_known_answer() {
-    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305;
+    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305Aead;
 
     let key = [
         0x80u8, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
@@ -517,8 +517,8 @@ fn test_xchacha20poly1305_known_answer() {
         0x47, 0xde, 0xaf, 0xd8, 0x78, 0x0a, 0xcf, 0x49,
     ];
 
-    let cipher = XChaCha20Poly1305::new_from_slice(&key).unwrap();
-    let nonce_arr: aead::Nonce<XChaCha20Poly1305> = nonce.into();
+    let cipher = XChaCha20Poly1305Aead::new_from_slice(&key).unwrap();
+    let nonce_arr: aead::Nonce<XChaCha20Poly1305Aead> = nonce.into();
     let tag = cipher
         .encrypt_in_place_detached(&nonce_arr, &aad, &mut plaintext)
         .expect("XChaCha20-Poly1305 encrypt failed");
@@ -531,14 +531,14 @@ fn test_xchacha20poly1305_known_answer() {
 #[test]
 #[cfg(xchacha20_poly1305)]
 fn test_xchacha20poly1305_reject_tampered() {
-    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305;
+    use wolfssl_wolfcrypt::chacha20_poly1305::XChaCha20Poly1305Aead;
 
     let key = [0x55u8; 32];
     let nonce_bytes = [0x66u8; 24];
     let plaintext = b"XChaCha tamper test";
 
-    let cipher = XChaCha20Poly1305::new_from_slice(&key).unwrap();
-    let nonce: aead::Nonce<XChaCha20Poly1305> = nonce_bytes.into();
+    let cipher = XChaCha20Poly1305Aead::new_from_slice(&key).unwrap();
+    let nonce: aead::Nonce<XChaCha20Poly1305Aead> = nonce_bytes.into();
 
     let mut ct = cipher.encrypt(&nonce, plaintext.as_ref()).expect("encrypt failed");
     ct[0] ^= 0x01;
