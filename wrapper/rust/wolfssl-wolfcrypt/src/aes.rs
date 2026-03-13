@@ -432,34 +432,20 @@ fn ccm_encrypt_in_place(
     buffer: &mut [u8],
     tag: &mut [u8],
 ) -> Result<(), aead::Error> {
-    let mut ws_aes = MaybeUninit::<sys::Aes>::uninit();
-    let rc = unsafe {
-        sys::wc_AesInit(ws_aes.as_mut_ptr(), core::ptr::null_mut(), sys::INVALID_DEVID)
-    };
-    if rc != 0 {
-        return Err(aead::Error);
-    }
-    let mut ws_aes = unsafe { ws_aes.assume_init() };
-    let rc = unsafe {
-        sys::wc_AesCcmSetKey(&mut ws_aes, key.as_ptr(), key.len() as u32)
-    };
-    if rc != 0 {
-        unsafe { sys::wc_AesFree(&mut ws_aes) };
-        return Err(aead::Error);
-    }
+    let mut ccm = CCM::new().map_err(|_| aead::Error)?;
+    ccm.init(key).map_err(|_| aead::Error)?;
     // wolfCrypt CCM supports in-place operation (out == in).
     let buf_ptr = buffer.as_mut_ptr();
     let in_ptr = buf_ptr as *const u8;
     let rc = unsafe {
         sys::wc_AesCcmEncrypt(
-            &mut ws_aes,
+            &mut ccm.ws_aes,
             buf_ptr, in_ptr, buffer.len() as u32,
             nonce.as_ptr(), nonce.len() as u32,
             tag.as_mut_ptr(), tag.len() as u32,
             aad.as_ptr(), aad.len() as u32,
         )
     };
-    unsafe { sys::wc_AesFree(&mut ws_aes) };
     if rc != 0 {
         return Err(aead::Error);
     }
@@ -475,33 +461,19 @@ fn ccm_decrypt_in_place(
     buffer: &mut [u8],
     tag: &[u8],
 ) -> Result<(), aead::Error> {
-    let mut ws_aes = MaybeUninit::<sys::Aes>::uninit();
-    let rc = unsafe {
-        sys::wc_AesInit(ws_aes.as_mut_ptr(), core::ptr::null_mut(), sys::INVALID_DEVID)
-    };
-    if rc != 0 {
-        return Err(aead::Error);
-    }
-    let mut ws_aes = unsafe { ws_aes.assume_init() };
-    let rc = unsafe {
-        sys::wc_AesCcmSetKey(&mut ws_aes, key.as_ptr(), key.len() as u32)
-    };
-    if rc != 0 {
-        unsafe { sys::wc_AesFree(&mut ws_aes) };
-        return Err(aead::Error);
-    }
+    let mut ccm = CCM::new().map_err(|_| aead::Error)?;
+    ccm.init(key).map_err(|_| aead::Error)?;
     let buf_ptr = buffer.as_mut_ptr();
     let in_ptr = buf_ptr as *const u8;
     let rc = unsafe {
         sys::wc_AesCcmDecrypt(
-            &mut ws_aes,
+            &mut ccm.ws_aes,
             buf_ptr, in_ptr, buffer.len() as u32,
             nonce.as_ptr(), nonce.len() as u32,
             tag.as_ptr(), tag.len() as u32,
             aad.as_ptr(), aad.len() as u32,
         )
     };
-    unsafe { sys::wc_AesFree(&mut ws_aes) };
     if rc != 0 {
         return Err(aead::Error);
     }
@@ -1217,7 +1189,6 @@ impl EAX {
     }
 }
 
-
 /// AES Electronic CodeBook (ECB) mode.
 ///
 /// # Example
@@ -1606,33 +1577,19 @@ fn gcm_encrypt_in_place(
     buffer: &mut [u8],
     tag: &mut [u8],
 ) -> Result<(), aead::Error> {
-    let mut ws_aes = MaybeUninit::<sys::Aes>::uninit();
-    let rc = unsafe {
-        sys::wc_AesInit(ws_aes.as_mut_ptr(), core::ptr::null_mut(), sys::INVALID_DEVID)
-    };
-    if rc != 0 {
-        return Err(aead::Error);
-    }
-    let mut ws_aes = unsafe { ws_aes.assume_init() };
-    let rc = unsafe {
-        sys::wc_AesGcmSetKey(&mut ws_aes, key.as_ptr(), key.len() as u32)
-    };
-    if rc != 0 {
-        unsafe { sys::wc_AesFree(&mut ws_aes) };
-        return Err(aead::Error);
-    }
+    let mut gcm = GCM::new().map_err(|_| aead::Error)?;
+    gcm.init(key).map_err(|_| aead::Error)?;
     let buf_ptr = buffer.as_mut_ptr();
     let in_ptr = buf_ptr as *const u8;
     let rc = unsafe {
         sys::wc_AesGcmEncrypt(
-            &mut ws_aes,
+            &mut gcm.ws_aes,
             buf_ptr, in_ptr, buffer.len() as u32,
             nonce.as_ptr(), nonce.len() as u32,
             tag.as_mut_ptr(), tag.len() as u32,
             aad.as_ptr(), aad.len() as u32,
         )
     };
-    unsafe { sys::wc_AesFree(&mut ws_aes) };
     if rc != 0 {
         return Err(aead::Error);
     }
@@ -1648,33 +1605,19 @@ fn gcm_decrypt_in_place(
     buffer: &mut [u8],
     tag: &[u8],
 ) -> Result<(), aead::Error> {
-    let mut ws_aes = MaybeUninit::<sys::Aes>::uninit();
-    let rc = unsafe {
-        sys::wc_AesInit(ws_aes.as_mut_ptr(), core::ptr::null_mut(), sys::INVALID_DEVID)
-    };
-    if rc != 0 {
-        return Err(aead::Error);
-    }
-    let mut ws_aes = unsafe { ws_aes.assume_init() };
-    let rc = unsafe {
-        sys::wc_AesGcmSetKey(&mut ws_aes, key.as_ptr(), key.len() as u32)
-    };
-    if rc != 0 {
-        unsafe { sys::wc_AesFree(&mut ws_aes) };
-        return Err(aead::Error);
-    }
+    let mut gcm = GCM::new().map_err(|_| aead::Error)?;
+    gcm.init(key).map_err(|_| aead::Error)?;
     let buf_ptr = buffer.as_mut_ptr();
     let in_ptr = buf_ptr as *const u8;
     let rc = unsafe {
         sys::wc_AesGcmDecrypt(
-            &mut ws_aes,
+            &mut gcm.ws_aes,
             buf_ptr, in_ptr, buffer.len() as u32,
             nonce.as_ptr(), nonce.len() as u32,
             tag.as_ptr(), tag.len() as u32,
             aad.as_ptr(), aad.len() as u32,
         )
     };
-    unsafe { sys::wc_AesFree(&mut ws_aes) };
     if rc != 0 {
         return Err(aead::Error);
     }
