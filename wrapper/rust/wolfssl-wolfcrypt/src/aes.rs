@@ -37,6 +37,8 @@ use aead::generic_array::typenum::{U0, U12, U16, U32};
 use cipher::{
     BlockCipherDecBackend, BlockCipherDecClosure, BlockCipherDecrypt,
     BlockCipherEncBackend, BlockCipherEncClosure, BlockCipherEncrypt,
+    BlockModeDecBackend, BlockModeDecClosure, BlockModeDecrypt,
+    BlockModeEncBackend, BlockModeEncClosure, BlockModeEncrypt,
     IvSizeUser, KeyIvInit, ParBlocksSizeUser, StreamCipher, StreamCipherError,
 };
 #[cfg(all(feature = "cipher", not(feature = "aead")))]
@@ -3728,6 +3730,474 @@ impl Drop for Aes256Ofb {
     }
 }
 
+
+// ---------------------------------------------------------------------------
+// AES-CBC block mode trait implementations
+// ---------------------------------------------------------------------------
+
+/// AES-128 CBC block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
+///
+/// CBC chains ciphertext blocks: each plaintext block is XORed with the
+/// previous ciphertext block (or the IV for the first block) before
+/// encryption. wolfCrypt maintains the IV state internally between calls,
+/// so blocks can be encrypted one at a time and the chaining is preserved.
+#[cfg(all(aes_cbc, feature = "cipher"))]
+pub struct Aes128CbcEnc {
+    ws_aes: sys::Aes,
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::KeySizeUser for Aes128CbcEnc {
+    type KeySize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes128CbcEnc {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl IvSizeUser for Aes128CbcEnc {
+    type IvSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl KeyIvInit for Aes128CbcEnc {
+    fn new(key: &cipher::Key<Self>, iv: &cipher::Iv<Self>) -> Self {
+        let mut ws_aes = new_ws_aes(None, None).expect("wc_AesInit failed");
+        let rc = unsafe {
+            sys::wc_AesSetKey(
+                &mut ws_aes, key.as_ptr(), 16, iv.as_ptr(), sys::AES_ENCRYPTION as i32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesSetKey failed: {rc}");
+        Self { ws_aes }
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+struct Aes128CbcEncBackend<'a>(&'a mut Aes128CbcEnc);
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes128CbcEncBackend<'_> {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl ParBlocksSizeUser for Aes128CbcEncBackend<'_> {
+    type ParBlocksSize = cipher::typenum::consts::U1;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeEncBackend for Aes128CbcEncBackend<'_> {
+    fn encrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+        let in_block = *block.get_in();
+        let out = block.get_out();
+        let rc = unsafe {
+            sys::wc_AesCbcEncrypt(
+                &mut self.0.ws_aes, out.as_mut_ptr(), in_block.as_ptr(), AES_BLOCK_SIZE as u32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesCbcEncrypt failed: {rc}");
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeEncrypt for Aes128CbcEnc {
+    fn encrypt_with_backend(&mut self, f: impl BlockModeEncClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes128CbcEncBackend(self));
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl Drop for Aes128CbcEnc {
+    fn drop(&mut self) {
+        unsafe { sys::wc_AesFree(&mut self.ws_aes); }
+    }
+}
+
+/// AES-192 CBC block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
+#[cfg(all(aes_cbc, feature = "cipher"))]
+pub struct Aes192CbcEnc {
+    ws_aes: sys::Aes,
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::KeySizeUser for Aes192CbcEnc {
+    type KeySize = U24;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes192CbcEnc {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl IvSizeUser for Aes192CbcEnc {
+    type IvSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl KeyIvInit for Aes192CbcEnc {
+    fn new(key: &cipher::Key<Self>, iv: &cipher::Iv<Self>) -> Self {
+        let mut ws_aes = new_ws_aes(None, None).expect("wc_AesInit failed");
+        let rc = unsafe {
+            sys::wc_AesSetKey(
+                &mut ws_aes, key.as_ptr(), 24, iv.as_ptr(), sys::AES_ENCRYPTION as i32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesSetKey failed: {rc}");
+        Self { ws_aes }
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+struct Aes192CbcEncBackend<'a>(&'a mut Aes192CbcEnc);
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes192CbcEncBackend<'_> {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl ParBlocksSizeUser for Aes192CbcEncBackend<'_> {
+    type ParBlocksSize = cipher::typenum::consts::U1;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeEncBackend for Aes192CbcEncBackend<'_> {
+    fn encrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+        let in_block = *block.get_in();
+        let out = block.get_out();
+        let rc = unsafe {
+            sys::wc_AesCbcEncrypt(
+                &mut self.0.ws_aes, out.as_mut_ptr(), in_block.as_ptr(), AES_BLOCK_SIZE as u32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesCbcEncrypt failed: {rc}");
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeEncrypt for Aes192CbcEnc {
+    fn encrypt_with_backend(&mut self, f: impl BlockModeEncClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes192CbcEncBackend(self));
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl Drop for Aes192CbcEnc {
+    fn drop(&mut self) {
+        unsafe { sys::wc_AesFree(&mut self.ws_aes); }
+    }
+}
+
+/// AES-256 CBC block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
+#[cfg(all(aes_cbc, feature = "cipher"))]
+pub struct Aes256CbcEnc {
+    ws_aes: sys::Aes,
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::KeySizeUser for Aes256CbcEnc {
+    type KeySize = U32;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes256CbcEnc {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl IvSizeUser for Aes256CbcEnc {
+    type IvSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl KeyIvInit for Aes256CbcEnc {
+    fn new(key: &cipher::Key<Self>, iv: &cipher::Iv<Self>) -> Self {
+        let mut ws_aes = new_ws_aes(None, None).expect("wc_AesInit failed");
+        let rc = unsafe {
+            sys::wc_AesSetKey(
+                &mut ws_aes, key.as_ptr(), 32, iv.as_ptr(), sys::AES_ENCRYPTION as i32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesSetKey failed: {rc}");
+        Self { ws_aes }
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+struct Aes256CbcEncBackend<'a>(&'a mut Aes256CbcEnc);
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes256CbcEncBackend<'_> {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl ParBlocksSizeUser for Aes256CbcEncBackend<'_> {
+    type ParBlocksSize = cipher::typenum::consts::U1;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeEncBackend for Aes256CbcEncBackend<'_> {
+    fn encrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+        let in_block = *block.get_in();
+        let out = block.get_out();
+        let rc = unsafe {
+            sys::wc_AesCbcEncrypt(
+                &mut self.0.ws_aes, out.as_mut_ptr(), in_block.as_ptr(), AES_BLOCK_SIZE as u32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesCbcEncrypt failed: {rc}");
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeEncrypt for Aes256CbcEnc {
+    fn encrypt_with_backend(&mut self, f: impl BlockModeEncClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes256CbcEncBackend(self));
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl Drop for Aes256CbcEnc {
+    fn drop(&mut self) {
+        unsafe { sys::wc_AesFree(&mut self.ws_aes); }
+    }
+}
+
+/// AES-128 CBC block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
+///
+/// wolfCrypt maintains the IV state (last ciphertext block) internally, so
+/// blocks can be decrypted one at a time and the chaining is preserved.
+#[cfg(all(aes_cbc, feature = "cipher"))]
+pub struct Aes128CbcDec {
+    ws_aes: sys::Aes,
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::KeySizeUser for Aes128CbcDec {
+    type KeySize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes128CbcDec {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl IvSizeUser for Aes128CbcDec {
+    type IvSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl KeyIvInit for Aes128CbcDec {
+    fn new(key: &cipher::Key<Self>, iv: &cipher::Iv<Self>) -> Self {
+        let mut ws_aes = new_ws_aes(None, None).expect("wc_AesInit failed");
+        let rc = unsafe {
+            sys::wc_AesSetKey(
+                &mut ws_aes, key.as_ptr(), 16, iv.as_ptr(), sys::AES_DECRYPTION as i32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesSetKey failed: {rc}");
+        Self { ws_aes }
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+struct Aes128CbcDecBackend<'a>(&'a mut Aes128CbcDec);
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes128CbcDecBackend<'_> {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl ParBlocksSizeUser for Aes128CbcDecBackend<'_> {
+    type ParBlocksSize = cipher::typenum::consts::U1;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeDecBackend for Aes128CbcDecBackend<'_> {
+    fn decrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+        let in_block = *block.get_in();
+        let out = block.get_out();
+        let rc = unsafe {
+            sys::wc_AesCbcDecrypt(
+                &mut self.0.ws_aes, out.as_mut_ptr(), in_block.as_ptr(), AES_BLOCK_SIZE as u32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesCbcDecrypt failed: {rc}");
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeDecrypt for Aes128CbcDec {
+    fn decrypt_with_backend(&mut self, f: impl BlockModeDecClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes128CbcDecBackend(self));
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl Drop for Aes128CbcDec {
+    fn drop(&mut self) {
+        unsafe { sys::wc_AesFree(&mut self.ws_aes); }
+    }
+}
+
+/// AES-192 CBC block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
+#[cfg(all(aes_cbc, feature = "cipher"))]
+pub struct Aes192CbcDec {
+    ws_aes: sys::Aes,
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::KeySizeUser for Aes192CbcDec {
+    type KeySize = U24;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes192CbcDec {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl IvSizeUser for Aes192CbcDec {
+    type IvSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl KeyIvInit for Aes192CbcDec {
+    fn new(key: &cipher::Key<Self>, iv: &cipher::Iv<Self>) -> Self {
+        let mut ws_aes = new_ws_aes(None, None).expect("wc_AesInit failed");
+        let rc = unsafe {
+            sys::wc_AesSetKey(
+                &mut ws_aes, key.as_ptr(), 24, iv.as_ptr(), sys::AES_DECRYPTION as i32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesSetKey failed: {rc}");
+        Self { ws_aes }
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+struct Aes192CbcDecBackend<'a>(&'a mut Aes192CbcDec);
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes192CbcDecBackend<'_> {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl ParBlocksSizeUser for Aes192CbcDecBackend<'_> {
+    type ParBlocksSize = cipher::typenum::consts::U1;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeDecBackend for Aes192CbcDecBackend<'_> {
+    fn decrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+        let in_block = *block.get_in();
+        let out = block.get_out();
+        let rc = unsafe {
+            sys::wc_AesCbcDecrypt(
+                &mut self.0.ws_aes, out.as_mut_ptr(), in_block.as_ptr(), AES_BLOCK_SIZE as u32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesCbcDecrypt failed: {rc}");
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeDecrypt for Aes192CbcDec {
+    fn decrypt_with_backend(&mut self, f: impl BlockModeDecClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes192CbcDecBackend(self));
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl Drop for Aes192CbcDec {
+    fn drop(&mut self) {
+        unsafe { sys::wc_AesFree(&mut self.ws_aes); }
+    }
+}
+
+/// AES-256 CBC block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
+#[cfg(all(aes_cbc, feature = "cipher"))]
+pub struct Aes256CbcDec {
+    ws_aes: sys::Aes,
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::KeySizeUser for Aes256CbcDec {
+    type KeySize = U32;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes256CbcDec {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl IvSizeUser for Aes256CbcDec {
+    type IvSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl KeyIvInit for Aes256CbcDec {
+    fn new(key: &cipher::Key<Self>, iv: &cipher::Iv<Self>) -> Self {
+        let mut ws_aes = new_ws_aes(None, None).expect("wc_AesInit failed");
+        let rc = unsafe {
+            sys::wc_AesSetKey(
+                &mut ws_aes, key.as_ptr(), 32, iv.as_ptr(), sys::AES_DECRYPTION as i32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesSetKey failed: {rc}");
+        Self { ws_aes }
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+struct Aes256CbcDecBackend<'a>(&'a mut Aes256CbcDec);
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl cipher::BlockSizeUser for Aes256CbcDecBackend<'_> {
+    type BlockSize = U16;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl ParBlocksSizeUser for Aes256CbcDecBackend<'_> {
+    type ParBlocksSize = cipher::typenum::consts::U1;
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeDecBackend for Aes256CbcDecBackend<'_> {
+    fn decrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+        let in_block = *block.get_in();
+        let out = block.get_out();
+        let rc = unsafe {
+            sys::wc_AesCbcDecrypt(
+                &mut self.0.ws_aes, out.as_mut_ptr(), in_block.as_ptr(), AES_BLOCK_SIZE as u32,
+            )
+        };
+        assert_eq!(rc, 0, "wc_AesCbcDecrypt failed: {rc}");
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl BlockModeDecrypt for Aes256CbcDec {
+    fn decrypt_with_backend(&mut self, f: impl BlockModeDecClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes256CbcDecBackend(self));
+    }
+}
+
+#[cfg(all(aes_cbc, feature = "cipher"))]
+impl Drop for Aes256CbcDec {
+    fn drop(&mut self) {
+        unsafe { sys::wc_AesFree(&mut self.ws_aes); }
+    }
+}
 
 fn new_ws_aes(heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<sys::Aes, i32> {
     let heap = match heap {

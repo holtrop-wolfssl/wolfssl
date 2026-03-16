@@ -1333,3 +1333,93 @@ fn test_aes128_ofb_roundtrip() {
     dec.apply_keystream(&mut data);
     assert_eq!(data, plaintext);
 }
+
+/// Test AES-128-CBC encryption against a known vector (same as test_cbc_encrypt_decrypt).
+#[test]
+#[cfg(all(feature = "cipher", aes_cbc))]
+fn test_aes128_cbc_enc_block_mode() {
+    use cipher::{BlockModeEncrypt, KeyIvInit};
+    use wolfssl_wolfcrypt::aes::Aes128CbcEnc;
+
+    let key: [u8; 16] = *b"0123456789abcdef";
+    let iv: [u8; 16] = *b"1234567890abcdef";
+    let plaintext: [u8; 16] = [
+        0x6e, 0x6f, 0x77, 0x20, 0x69, 0x73, 0x20, 0x74,
+        0x68, 0x65, 0x20, 0x74, 0x69, 0x6d, 0x65, 0x20,
+    ];
+    let expected: [u8; 16] = [
+        0x95, 0x94, 0x92, 0x57, 0x5f, 0x42, 0x81, 0x53,
+        0x2c, 0xcc, 0x9d, 0x46, 0x77, 0xa2, 0x33, 0xcb,
+    ];
+
+    let key_arr = cipher::Key::<Aes128CbcEnc>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes128CbcEnc>::try_from(&iv[..]).unwrap();
+    let mut enc = Aes128CbcEnc::new(&key_arr, &iv_arr);
+    let mut block = cipher::Block::<Aes128CbcEnc>::try_from(&plaintext[..]).unwrap();
+    enc.encrypt_block(&mut block);
+    assert_eq!(block.as_slice(), &expected);
+}
+
+/// Test AES-128-CBC decryption roundtrip.
+#[test]
+#[cfg(all(feature = "cipher", aes_cbc))]
+fn test_aes128_cbc_dec_block_mode() {
+    use cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
+    use wolfssl_wolfcrypt::aes::{Aes128CbcDec, Aes128CbcEnc};
+
+    let key: [u8; 16] = *b"0123456789abcdef";
+    let iv: [u8; 16] = *b"1234567890abcdef";
+    let plaintext: [u8; 16] = [
+        0x6e, 0x6f, 0x77, 0x20, 0x69, 0x73, 0x20, 0x74,
+        0x68, 0x65, 0x20, 0x74, 0x69, 0x6d, 0x65, 0x20,
+    ];
+
+    let key_arr = cipher::Key::<Aes128CbcEnc>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes128CbcEnc>::try_from(&iv[..]).unwrap();
+    let mut enc = Aes128CbcEnc::new(&key_arr, &iv_arr);
+    let mut block = cipher::Block::<Aes128CbcEnc>::try_from(&plaintext[..]).unwrap();
+    enc.encrypt_block(&mut block);
+
+    let key_arr = cipher::Key::<Aes128CbcDec>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes128CbcDec>::try_from(&iv[..]).unwrap();
+    let mut dec = Aes128CbcDec::new(&key_arr, &iv_arr);
+    dec.decrypt_block(&mut block);
+    assert_eq!(block.as_slice(), &plaintext);
+}
+
+/// Test AES-256-CBC encryption/decryption roundtrip across multiple blocks.
+#[test]
+#[cfg(all(feature = "cipher", aes_cbc))]
+fn test_aes256_cbc_roundtrip() {
+    use cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit};
+    use wolfssl_wolfcrypt::aes::{Aes256CbcDec, Aes256CbcEnc};
+
+    let key = [0xabu8; 32];
+    let iv = [0xcdu8; 16];
+    let plaintext = [[0x5cu8; 16], [0x3au8; 16], [0x1eu8; 16]];
+
+    let key_arr = cipher::Key::<Aes256CbcEnc>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes256CbcEnc>::try_from(&iv[..]).unwrap();
+    let mut enc = Aes256CbcEnc::new(&key_arr, &iv_arr);
+    let mut blocks: [cipher::Block<Aes256CbcEnc>; 3] = plaintext
+        .iter()
+        .map(|b| cipher::Block::<Aes256CbcEnc>::try_from(b.as_ref()).unwrap())
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    for block in blocks.iter_mut() {
+        enc.encrypt_block(block);
+    }
+    // Ciphertext must differ from plaintext due to key and IV mixing.
+    assert!(blocks.iter().zip(plaintext.iter()).any(|(c, p)| c.as_slice() != p));
+
+    let key_arr = cipher::Key::<Aes256CbcDec>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes256CbcDec>::try_from(&iv[..]).unwrap();
+    let mut dec = Aes256CbcDec::new(&key_arr, &iv_arr);
+    for block in blocks.iter_mut() {
+        dec.decrypt_block(block);
+    }
+    for (block, expected) in blocks.iter().zip(plaintext.iter()) {
+        assert_eq!(block.as_slice(), expected);
+    }
+}
