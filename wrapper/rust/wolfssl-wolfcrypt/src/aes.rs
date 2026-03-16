@@ -35,8 +35,6 @@ use aead::generic_array::typenum::{U0, U12, U16, U32};
 
 #[cfg(feature = "cipher")]
 use cipher::{
-    BlockCipherDecBackend, BlockCipherDecClosure, BlockCipherDecrypt,
-    BlockCipherEncBackend, BlockCipherEncClosure, BlockCipherEncrypt,
     BlockModeDecBackend, BlockModeDecClosure, BlockModeDecrypt,
     BlockModeEncBackend, BlockModeEncClosure, BlockModeEncrypt,
     IvSizeUser, KeyIvInit, ParBlocksSizeUser, StreamCipher, StreamCipherError,
@@ -2882,20 +2880,14 @@ impl Drop for XTSStream {
 // AES-ECB cipher trait implementations
 // ---------------------------------------------------------------------------
 
-/// AES-128 ECB block cipher (encryption) implementing [`cipher::BlockCipherEncrypt`].
+/// AES-128 ECB block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 ///
 /// The key schedule is computed once during construction via
 /// [`cipher::KeyInit::new`] or [`cipher::KeyInit::new_from_slice`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes128EcbEnc {
-    inner: core::cell::UnsafeCell<ECB>,
+    inner: ECB,
 }
-
-/// SAFETY: The `UnsafeCell` is only accessed via raw pointers passed to
-/// wolfCrypt. AES-ECB encryption reads the key schedule without mutating
-/// shared state, so the type is safe to send across threads.
-#[cfg(all(aes_ecb, feature = "cipher"))]
-unsafe impl Send for Aes128EcbEnc {}
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeySizeUser for Aes128EcbEnc {
@@ -2913,12 +2905,12 @@ impl cipher::KeyInit for Aes128EcbEnc {
     fn new(key: &cipher::Key<Self>) -> Self {
         let mut ecb = ECB::new().expect("wc_AesInit failed");
         ecb.init_encrypt(key.as_ref()).expect("wc_AesSetKey failed");
-        Self { inner: core::cell::UnsafeCell::new(ecb) }
+        Self { inner: ecb }
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-struct Aes128EcbEncBackend<'a>(&'a Aes128EcbEnc);
+struct Aes128EcbEncBackend<'a>(&'a mut Aes128EcbEnc);
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::BlockSizeUser for Aes128EcbEncBackend<'_> {
@@ -2931,31 +2923,27 @@ impl ParBlocksSizeUser for Aes128EcbEncBackend<'_> {
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherEncBackend for Aes128EcbEncBackend<'_> {
-    fn encrypt_block(&self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+impl BlockModeEncBackend for Aes128EcbEncBackend<'_> {
+    fn encrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
         let in_block = *block.get_in();
         let out = block.get_out();
-        let ecb = unsafe { &mut *self.0.inner.get() };
-        ecb.encrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbEncrypt failed");
+        self.0.inner.encrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbEncrypt failed");
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherEncrypt for Aes128EcbEnc {
-    fn encrypt_with_backend(&self, f: impl BlockCipherEncClosure<BlockSize = Self::BlockSize>) {
-        f.call(&Aes128EcbEncBackend(self));
+impl BlockModeEncrypt for Aes128EcbEnc {
+    fn encrypt_with_backend(&mut self, f: impl BlockModeEncClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes128EcbEncBackend(self));
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-/// AES-192 ECB block cipher (encryption) implementing [`cipher::BlockCipherEncrypt`].
+/// AES-192 ECB block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes192EcbEnc {
-    inner: core::cell::UnsafeCell<ECB>,
+    inner: ECB,
 }
-
-#[cfg(all(aes_ecb, feature = "cipher"))]
-unsafe impl Send for Aes192EcbEnc {}
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeySizeUser for Aes192EcbEnc {
@@ -2973,12 +2961,12 @@ impl cipher::KeyInit for Aes192EcbEnc {
     fn new(key: &cipher::Key<Self>) -> Self {
         let mut ecb = ECB::new().expect("wc_AesInit failed");
         ecb.init_encrypt(key.as_ref()).expect("wc_AesSetKey failed");
-        Self { inner: core::cell::UnsafeCell::new(ecb) }
+        Self { inner: ecb }
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-struct Aes192EcbEncBackend<'a>(&'a Aes192EcbEnc);
+struct Aes192EcbEncBackend<'a>(&'a mut Aes192EcbEnc);
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::BlockSizeUser for Aes192EcbEncBackend<'_> {
@@ -2991,31 +2979,27 @@ impl ParBlocksSizeUser for Aes192EcbEncBackend<'_> {
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherEncBackend for Aes192EcbEncBackend<'_> {
-    fn encrypt_block(&self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+impl BlockModeEncBackend for Aes192EcbEncBackend<'_> {
+    fn encrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
         let in_block = *block.get_in();
         let out = block.get_out();
-        let ecb = unsafe { &mut *self.0.inner.get() };
-        ecb.encrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbEncrypt failed");
+        self.0.inner.encrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbEncrypt failed");
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherEncrypt for Aes192EcbEnc {
-    fn encrypt_with_backend(&self, f: impl BlockCipherEncClosure<BlockSize = Self::BlockSize>) {
-        f.call(&Aes192EcbEncBackend(self));
+impl BlockModeEncrypt for Aes192EcbEnc {
+    fn encrypt_with_backend(&mut self, f: impl BlockModeEncClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes192EcbEncBackend(self));
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-/// AES-256 ECB block cipher (encryption) implementing [`cipher::BlockCipherEncrypt`].
+/// AES-256 ECB block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes256EcbEnc {
-    inner: core::cell::UnsafeCell<ECB>,
+    inner: ECB,
 }
-
-#[cfg(all(aes_ecb, feature = "cipher"))]
-unsafe impl Send for Aes256EcbEnc {}
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeySizeUser for Aes256EcbEnc {
@@ -3033,12 +3017,12 @@ impl cipher::KeyInit for Aes256EcbEnc {
     fn new(key: &cipher::Key<Self>) -> Self {
         let mut ecb = ECB::new().expect("wc_AesInit failed");
         ecb.init_encrypt(key.as_ref()).expect("wc_AesSetKey failed");
-        Self { inner: core::cell::UnsafeCell::new(ecb) }
+        Self { inner: ecb }
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-struct Aes256EcbEncBackend<'a>(&'a Aes256EcbEnc);
+struct Aes256EcbEncBackend<'a>(&'a mut Aes256EcbEnc);
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::BlockSizeUser for Aes256EcbEncBackend<'_> {
@@ -3051,34 +3035,30 @@ impl ParBlocksSizeUser for Aes256EcbEncBackend<'_> {
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherEncBackend for Aes256EcbEncBackend<'_> {
-    fn encrypt_block(&self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+impl BlockModeEncBackend for Aes256EcbEncBackend<'_> {
+    fn encrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
         let in_block = *block.get_in();
         let out = block.get_out();
-        let ecb = unsafe { &mut *self.0.inner.get() };
-        ecb.encrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbEncrypt failed");
+        self.0.inner.encrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbEncrypt failed");
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherEncrypt for Aes256EcbEnc {
-    fn encrypt_with_backend(&self, f: impl BlockCipherEncClosure<BlockSize = Self::BlockSize>) {
-        f.call(&Aes256EcbEncBackend(self));
+impl BlockModeEncrypt for Aes256EcbEnc {
+    fn encrypt_with_backend(&mut self, f: impl BlockModeEncClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes256EcbEncBackend(self));
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-/// AES-128 ECB block cipher (decryption) implementing [`cipher::BlockCipherDecrypt`].
+/// AES-128 ECB block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 ///
 /// The key schedule is computed once during construction via
 /// [`cipher::KeyInit::new`] or [`cipher::KeyInit::new_from_slice`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes128EcbDec {
-    inner: core::cell::UnsafeCell<ECB>,
+    inner: ECB,
 }
-
-#[cfg(all(aes_ecb, feature = "cipher"))]
-unsafe impl Send for Aes128EcbDec {}
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeySizeUser for Aes128EcbDec {
@@ -3096,12 +3076,12 @@ impl cipher::KeyInit for Aes128EcbDec {
     fn new(key: &cipher::Key<Self>) -> Self {
         let mut ecb = ECB::new().expect("wc_AesInit failed");
         ecb.init_decrypt(key.as_ref()).expect("wc_AesSetKey failed");
-        Self { inner: core::cell::UnsafeCell::new(ecb) }
+        Self { inner: ecb }
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-struct Aes128EcbDecBackend<'a>(&'a Aes128EcbDec);
+struct Aes128EcbDecBackend<'a>(&'a mut Aes128EcbDec);
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::BlockSizeUser for Aes128EcbDecBackend<'_> {
@@ -3114,31 +3094,27 @@ impl ParBlocksSizeUser for Aes128EcbDecBackend<'_> {
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherDecBackend for Aes128EcbDecBackend<'_> {
-    fn decrypt_block(&self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+impl BlockModeDecBackend for Aes128EcbDecBackend<'_> {
+    fn decrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
         let in_block = *block.get_in();
         let out = block.get_out();
-        let ecb = unsafe { &mut *self.0.inner.get() };
-        ecb.decrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbDecrypt failed");
+        self.0.inner.decrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbDecrypt failed");
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherDecrypt for Aes128EcbDec {
-    fn decrypt_with_backend(&self, f: impl BlockCipherDecClosure<BlockSize = Self::BlockSize>) {
-        f.call(&Aes128EcbDecBackend(self));
+impl BlockModeDecrypt for Aes128EcbDec {
+    fn decrypt_with_backend(&mut self, f: impl BlockModeDecClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes128EcbDecBackend(self));
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-/// AES-192 ECB block cipher (decryption) implementing [`cipher::BlockCipherDecrypt`].
+/// AES-192 ECB block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes192EcbDec {
-    inner: core::cell::UnsafeCell<ECB>,
+    inner: ECB,
 }
-
-#[cfg(all(aes_ecb, feature = "cipher"))]
-unsafe impl Send for Aes192EcbDec {}
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeySizeUser for Aes192EcbDec {
@@ -3156,12 +3132,12 @@ impl cipher::KeyInit for Aes192EcbDec {
     fn new(key: &cipher::Key<Self>) -> Self {
         let mut ecb = ECB::new().expect("wc_AesInit failed");
         ecb.init_decrypt(key.as_ref()).expect("wc_AesSetKey failed");
-        Self { inner: core::cell::UnsafeCell::new(ecb) }
+        Self { inner: ecb }
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-struct Aes192EcbDecBackend<'a>(&'a Aes192EcbDec);
+struct Aes192EcbDecBackend<'a>(&'a mut Aes192EcbDec);
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::BlockSizeUser for Aes192EcbDecBackend<'_> {
@@ -3174,31 +3150,27 @@ impl ParBlocksSizeUser for Aes192EcbDecBackend<'_> {
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherDecBackend for Aes192EcbDecBackend<'_> {
-    fn decrypt_block(&self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+impl BlockModeDecBackend for Aes192EcbDecBackend<'_> {
+    fn decrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
         let in_block = *block.get_in();
         let out = block.get_out();
-        let ecb = unsafe { &mut *self.0.inner.get() };
-        ecb.decrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbDecrypt failed");
+        self.0.inner.decrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbDecrypt failed");
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherDecrypt for Aes192EcbDec {
-    fn decrypt_with_backend(&self, f: impl BlockCipherDecClosure<BlockSize = Self::BlockSize>) {
-        f.call(&Aes192EcbDecBackend(self));
+impl BlockModeDecrypt for Aes192EcbDec {
+    fn decrypt_with_backend(&mut self, f: impl BlockModeDecClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes192EcbDecBackend(self));
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-/// AES-256 ECB block cipher (decryption) implementing [`cipher::BlockCipherDecrypt`].
+/// AES-256 ECB block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes256EcbDec {
-    inner: core::cell::UnsafeCell<ECB>,
+    inner: ECB,
 }
-
-#[cfg(all(aes_ecb, feature = "cipher"))]
-unsafe impl Send for Aes256EcbDec {}
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeySizeUser for Aes256EcbDec {
@@ -3216,12 +3188,12 @@ impl cipher::KeyInit for Aes256EcbDec {
     fn new(key: &cipher::Key<Self>) -> Self {
         let mut ecb = ECB::new().expect("wc_AesInit failed");
         ecb.init_decrypt(key.as_ref()).expect("wc_AesSetKey failed");
-        Self { inner: core::cell::UnsafeCell::new(ecb) }
+        Self { inner: ecb }
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-struct Aes256EcbDecBackend<'a>(&'a Aes256EcbDec);
+struct Aes256EcbDecBackend<'a>(&'a mut Aes256EcbDec);
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::BlockSizeUser for Aes256EcbDecBackend<'_> {
@@ -3234,19 +3206,18 @@ impl ParBlocksSizeUser for Aes256EcbDecBackend<'_> {
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherDecBackend for Aes256EcbDecBackend<'_> {
-    fn decrypt_block(&self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
+impl BlockModeDecBackend for Aes256EcbDecBackend<'_> {
+    fn decrypt_block(&mut self, mut block: cipher::InOut<'_, '_, cipher::Block<Self>>) {
         let in_block = *block.get_in();
         let out = block.get_out();
-        let ecb = unsafe { &mut *self.0.inner.get() };
-        ecb.decrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbDecrypt failed");
+        self.0.inner.decrypt(in_block.as_ref(), out.as_mut()).expect("wc_AesEcbDecrypt failed");
     }
 }
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
-impl BlockCipherDecrypt for Aes256EcbDec {
-    fn decrypt_with_backend(&self, f: impl BlockCipherDecClosure<BlockSize = Self::BlockSize>) {
-        f.call(&Aes256EcbDecBackend(self));
+impl BlockModeDecrypt for Aes256EcbDec {
+    fn decrypt_with_backend(&mut self, f: impl BlockModeDecClosure<BlockSize = Self::BlockSize>) {
+        f.call(&mut Aes256EcbDecBackend(self));
     }
 }
 

@@ -1124,7 +1124,7 @@ fn test_aes256ccm_aead_roundtrip() {
 #[test]
 #[cfg(all(feature = "cipher", aes_ecb))]
 fn test_aes128_ecb_enc_block_encrypt() {
-    use cipher::{BlockCipherEncrypt, KeyInit};
+    use cipher::{BlockModeEncrypt, KeyInit};
     use wolfssl_wolfcrypt::aes::Aes128EcbEnc;
 
     let key: [u8; 16] = *b"0123456789abcdef";
@@ -1137,7 +1137,7 @@ fn test_aes128_ecb_enc_block_encrypt() {
         0xc8, 0x8c, 0x33, 0x3b, 0xb5, 0x8f, 0x85, 0xd1,
     ];
 
-    let enc = Aes128EcbEnc::new_from_slice(&key).expect("key init failed");
+    let mut enc = Aes128EcbEnc::new_from_slice(&key).expect("key init failed");
     let mut block = cipher::Block::<Aes128EcbEnc>::try_from(&plaintext[..]).unwrap();
     enc.encrypt_block(&mut block);
     assert_eq!(block.as_slice(), &expected);
@@ -1147,7 +1147,7 @@ fn test_aes128_ecb_enc_block_encrypt() {
 #[test]
 #[cfg(all(feature = "cipher", aes_ecb))]
 fn test_aes128_ecb_dec_block_decrypt() {
-    use cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
+    use cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyInit};
     use wolfssl_wolfcrypt::aes::{Aes128EcbDec, Aes128EcbEnc};
 
     let key: [u8; 16] = *b"0123456789abcdef";
@@ -1156,8 +1156,8 @@ fn test_aes128_ecb_dec_block_decrypt() {
         0x68, 0x65, 0x20, 0x74, 0x69, 0x6d, 0x65, 0x20,
     ];
 
-    let enc = Aes128EcbEnc::new_from_slice(&key).expect("enc init failed");
-    let dec = Aes128EcbDec::new_from_slice(&key).expect("dec init failed");
+    let mut enc = Aes128EcbEnc::new_from_slice(&key).expect("enc init failed");
+    let mut dec = Aes128EcbDec::new_from_slice(&key).expect("dec init failed");
 
     let mut block = cipher::Block::<Aes128EcbEnc>::try_from(&plaintext[..]).unwrap();
     enc.encrypt_block(&mut block);
@@ -1172,14 +1172,14 @@ fn test_aes128_ecb_dec_block_decrypt() {
 #[test]
 #[cfg(all(feature = "cipher", aes_ecb))]
 fn test_aes256_ecb_roundtrip() {
-    use cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
+    use cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyInit};
     use wolfssl_wolfcrypt::aes::{Aes256EcbDec, Aes256EcbEnc};
 
     let key = [0xabu8; 32];
     let plaintext = [0x5cu8; 16];
 
-    let enc = Aes256EcbEnc::new_from_slice(&key).expect("enc init failed");
-    let dec = Aes256EcbDec::new_from_slice(&key).expect("dec init failed");
+    let mut enc = Aes256EcbEnc::new_from_slice(&key).expect("enc init failed");
+    let mut dec = Aes256EcbDec::new_from_slice(&key).expect("dec init failed");
 
     let mut block = cipher::Block::<Aes256EcbEnc>::try_from(&plaintext[..]).unwrap();
     enc.encrypt_block(&mut block);
