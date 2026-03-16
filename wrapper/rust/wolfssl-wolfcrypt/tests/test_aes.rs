@@ -1124,7 +1124,7 @@ fn test_aes256ccm_aead_roundtrip() {
 #[test]
 #[cfg(all(feature = "cipher", aes_ecb))]
 fn test_aes128_ecb_enc_block_encrypt() {
-    use cipher::{BlockEncrypt, KeyInit};
+    use cipher::{BlockCipherEncrypt, KeyInit};
     use wolfssl_wolfcrypt::aes::Aes128EcbEnc;
 
     let key: [u8; 16] = *b"0123456789abcdef";
@@ -1138,7 +1138,7 @@ fn test_aes128_ecb_enc_block_encrypt() {
     ];
 
     let enc = Aes128EcbEnc::new_from_slice(&key).expect("key init failed");
-    let mut block = cipher::Block::<Aes128EcbEnc>::clone_from_slice(&plaintext);
+    let mut block = cipher::Block::<Aes128EcbEnc>::try_from(&plaintext[..]).unwrap();
     enc.encrypt_block(&mut block);
     assert_eq!(block.as_slice(), &expected);
 }
@@ -1147,7 +1147,7 @@ fn test_aes128_ecb_enc_block_encrypt() {
 #[test]
 #[cfg(all(feature = "cipher", aes_ecb))]
 fn test_aes128_ecb_dec_block_decrypt() {
-    use cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+    use cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
     use wolfssl_wolfcrypt::aes::{Aes128EcbDec, Aes128EcbEnc};
 
     let key: [u8; 16] = *b"0123456789abcdef";
@@ -1159,10 +1159,10 @@ fn test_aes128_ecb_dec_block_decrypt() {
     let enc = Aes128EcbEnc::new_from_slice(&key).expect("enc init failed");
     let dec = Aes128EcbDec::new_from_slice(&key).expect("dec init failed");
 
-    let mut block = cipher::Block::<Aes128EcbEnc>::clone_from_slice(&plaintext);
+    let mut block = cipher::Block::<Aes128EcbEnc>::try_from(&plaintext[..]).unwrap();
     enc.encrypt_block(&mut block);
 
-    let mut block2 = cipher::Block::<Aes128EcbDec>::clone_from_slice(block.as_slice());
+    let mut block2 = cipher::Block::<Aes128EcbDec>::try_from(block.as_slice()).unwrap();
     dec.decrypt_block(&mut block2);
 
     assert_eq!(block2.as_slice(), &plaintext);
@@ -1172,7 +1172,7 @@ fn test_aes128_ecb_dec_block_decrypt() {
 #[test]
 #[cfg(all(feature = "cipher", aes_ecb))]
 fn test_aes256_ecb_roundtrip() {
-    use cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+    use cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
     use wolfssl_wolfcrypt::aes::{Aes256EcbDec, Aes256EcbEnc};
 
     let key = [0xabu8; 32];
@@ -1181,11 +1181,11 @@ fn test_aes256_ecb_roundtrip() {
     let enc = Aes256EcbEnc::new_from_slice(&key).expect("enc init failed");
     let dec = Aes256EcbDec::new_from_slice(&key).expect("dec init failed");
 
-    let mut block = cipher::Block::<Aes256EcbEnc>::clone_from_slice(&plaintext);
+    let mut block = cipher::Block::<Aes256EcbEnc>::try_from(&plaintext[..]).unwrap();
     enc.encrypt_block(&mut block);
     assert_ne!(block.as_slice(), &plaintext, "encrypted block should differ from plaintext");
 
-    let mut block2 = cipher::Block::<Aes256EcbDec>::clone_from_slice(block.as_slice());
+    let mut block2 = cipher::Block::<Aes256EcbDec>::try_from(block.as_slice()).unwrap();
     dec.decrypt_block(&mut block2);
     assert_eq!(block2.as_slice(), &plaintext);
 }
@@ -1226,8 +1226,8 @@ fn test_aes128_ctr_apply_keystream() {
         0x79, 0x21, 0x70, 0xa0, 0xf3, 0x00, 0x9c, 0xee,
     ];
 
-    let key_arr = cipher::Key::<Aes128Ctr>::clone_from_slice(&key);
-    let iv_arr = cipher::Iv::<Aes128Ctr>::clone_from_slice(&iv);
+    let key_arr = cipher::Key::<Aes128Ctr>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes128Ctr>::try_from(&iv[..]).unwrap();
     let mut enc = Aes128Ctr::new(&key_arr, &iv_arr);
     let mut data = plaintext;
     enc.apply_keystream(&mut data);
@@ -1250,8 +1250,8 @@ fn test_aes256_ctr_roundtrip() {
     let iv = [0x02u8; 16];
     let plaintext = [0x55u8; 48];
 
-    let key_arr = cipher::Key::<Aes256Ctr>::clone_from_slice(&key);
-    let iv_arr = cipher::Iv::<Aes256Ctr>::clone_from_slice(&iv);
+    let key_arr = cipher::Key::<Aes256Ctr>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes256Ctr>::try_from(&iv[..]).unwrap();
 
     let mut enc = Aes256Ctr::new(&key_arr, &iv_arr);
     let mut data = plaintext;
@@ -1297,8 +1297,8 @@ fn test_aes256_ofb_apply_keystream() {
         0xfd, 0x64, 0xa2, 0xe1, 0xe2, 0x76, 0x13, 0xb0,
     ];
 
-    let key_arr = cipher::Key::<Aes256Ofb>::clone_from_slice(&key);
-    let iv_arr = cipher::Iv::<Aes256Ofb>::clone_from_slice(&iv);
+    let key_arr = cipher::Key::<Aes256Ofb>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes256Ofb>::try_from(&iv[..]).unwrap();
     let mut enc = Aes256Ofb::new(&key_arr, &iv_arr);
     let mut data = plaintext;
     enc.apply_keystream(&mut data);
@@ -1321,8 +1321,8 @@ fn test_aes128_ofb_roundtrip() {
     let iv = [0xeeu8; 16];
     let plaintext = [0x42u8; 32];
 
-    let key_arr = cipher::Key::<Aes128Ofb>::clone_from_slice(&key);
-    let iv_arr = cipher::Iv::<Aes128Ofb>::clone_from_slice(&iv);
+    let key_arr = cipher::Key::<Aes128Ofb>::try_from(&key[..]).unwrap();
+    let iv_arr = cipher::Iv::<Aes128Ofb>::try_from(&iv[..]).unwrap();
 
     let mut enc = Aes128Ofb::new(&key_arr, &iv_arr);
     let mut data = plaintext;
