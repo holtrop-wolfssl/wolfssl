@@ -30,8 +30,15 @@ use core::mem::{size_of_val, MaybeUninit};
 
 #[cfg(feature = "aead")]
 use aead::{AeadCore, AeadInPlace, KeyInit, KeySizeUser};
+
 #[cfg(feature = "aead")]
 use aead::generic_array::typenum::{U0, U12, U16, U32};
+
+#[cfg(all(feature = "cipher", not(feature = "aead")))]
+use cipher::typenum::consts::{U16, U32};
+
+#[cfg(feature = "cipher")]
+use cipher::typenum::consts::U24;
 
 #[cfg(feature = "cipher")]
 use cipher::{
@@ -39,10 +46,6 @@ use cipher::{
     BlockModeEncBackend, BlockModeEncClosure, BlockModeEncrypt,
     IvSizeUser, KeyIvInit, ParBlocksSizeUser, StreamCipher, StreamCipherError,
 };
-#[cfg(all(feature = "cipher", not(feature = "aead")))]
-use cipher::typenum::consts::{U16, U32};
-#[cfg(feature = "cipher")]
-use cipher::typenum::consts::U24;
 
 #[cfg(aes_wc_block_size)]
 pub const AES_BLOCK_SIZE: usize = sys::WC_AES_BLOCK_SIZE as usize;
@@ -2899,7 +2902,6 @@ impl cipher::BlockSizeUser for Aes128EcbEnc {
     type BlockSize = U16;
 }
 
-
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeyInit for Aes128EcbEnc {
     fn new(key: &cipher::Key<Self>) -> Self {
@@ -2938,7 +2940,6 @@ impl BlockModeEncrypt for Aes128EcbEnc {
     }
 }
 
-#[cfg(all(aes_ecb, feature = "cipher"))]
 /// AES-192 ECB block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes192EcbEnc {
@@ -2954,7 +2955,6 @@ impl cipher::KeySizeUser for Aes192EcbEnc {
 impl cipher::BlockSizeUser for Aes192EcbEnc {
     type BlockSize = U16;
 }
-
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeyInit for Aes192EcbEnc {
@@ -2994,7 +2994,6 @@ impl BlockModeEncrypt for Aes192EcbEnc {
     }
 }
 
-#[cfg(all(aes_ecb, feature = "cipher"))]
 /// AES-256 ECB block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes256EcbEnc {
@@ -3010,7 +3009,6 @@ impl cipher::KeySizeUser for Aes256EcbEnc {
 impl cipher::BlockSizeUser for Aes256EcbEnc {
     type BlockSize = U16;
 }
-
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeyInit for Aes256EcbEnc {
@@ -3050,7 +3048,6 @@ impl BlockModeEncrypt for Aes256EcbEnc {
     }
 }
 
-#[cfg(all(aes_ecb, feature = "cipher"))]
 /// AES-128 ECB block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 ///
 /// The key schedule is computed once during construction via
@@ -3069,7 +3066,6 @@ impl cipher::KeySizeUser for Aes128EcbDec {
 impl cipher::BlockSizeUser for Aes128EcbDec {
     type BlockSize = U16;
 }
-
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeyInit for Aes128EcbDec {
@@ -3109,7 +3105,6 @@ impl BlockModeDecrypt for Aes128EcbDec {
     }
 }
 
-#[cfg(all(aes_ecb, feature = "cipher"))]
 /// AES-192 ECB block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes192EcbDec {
@@ -3125,7 +3120,6 @@ impl cipher::KeySizeUser for Aes192EcbDec {
 impl cipher::BlockSizeUser for Aes192EcbDec {
     type BlockSize = U16;
 }
-
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeyInit for Aes192EcbDec {
@@ -3165,7 +3159,6 @@ impl BlockModeDecrypt for Aes192EcbDec {
     }
 }
 
-#[cfg(all(aes_ecb, feature = "cipher"))]
 /// AES-256 ECB block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 #[cfg(all(aes_ecb, feature = "cipher"))]
 pub struct Aes256EcbDec {
@@ -3181,7 +3174,6 @@ impl cipher::KeySizeUser for Aes256EcbDec {
 impl cipher::BlockSizeUser for Aes256EcbDec {
     type BlockSize = U16;
 }
-
 
 #[cfg(all(aes_ecb, feature = "cipher"))]
 impl cipher::KeyInit for Aes256EcbDec {
@@ -3277,7 +3269,6 @@ impl StreamCipher for Aes128Ctr {
     }
 }
 
-#[cfg(all(aes_ctr, feature = "cipher"))]
 /// AES-192 CTR stream cipher implementing [`cipher::StreamCipher`].
 #[cfg(all(aes_ctr, feature = "cipher"))]
 pub struct Aes192Ctr {
@@ -3326,7 +3317,6 @@ impl StreamCipher for Aes192Ctr {
     }
 }
 
-#[cfg(all(aes_ctr, feature = "cipher"))]
 /// AES-256 CTR stream cipher implementing [`cipher::StreamCipher`].
 #[cfg(all(aes_ctr, feature = "cipher"))]
 pub struct Aes256Ctr {
@@ -3432,7 +3422,6 @@ impl StreamCipher for Aes128Ofb {
     }
 }
 
-#[cfg(all(aes_ofb, feature = "cipher"))]
 /// AES-192 OFB stream cipher implementing [`cipher::StreamCipher`].
 #[cfg(all(aes_ofb, feature = "cipher"))]
 pub struct Aes192Ofb {
@@ -3481,7 +3470,6 @@ impl StreamCipher for Aes192Ofb {
     }
 }
 
-#[cfg(all(aes_ofb, feature = "cipher"))]
 /// AES-256 OFB stream cipher implementing [`cipher::StreamCipher`].
 #[cfg(all(aes_ofb, feature = "cipher"))]
 pub struct Aes256Ofb {
@@ -3598,7 +3586,6 @@ impl BlockModeEncrypt for Aes128CbcEnc {
     }
 }
 
-#[cfg(all(aes_cbc, feature = "cipher"))]
 /// AES-192 CBC block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 #[cfg(all(aes_cbc, feature = "cipher"))]
 pub struct Aes192CbcEnc {
@@ -3658,7 +3645,6 @@ impl BlockModeEncrypt for Aes192CbcEnc {
     }
 }
 
-#[cfg(all(aes_cbc, feature = "cipher"))]
 /// AES-256 CBC block cipher (encryption) implementing [`cipher::BlockModeEncrypt`].
 #[cfg(all(aes_cbc, feature = "cipher"))]
 pub struct Aes256CbcEnc {
@@ -3718,7 +3704,6 @@ impl BlockModeEncrypt for Aes256CbcEnc {
     }
 }
 
-#[cfg(all(aes_cbc, feature = "cipher"))]
 /// AES-128 CBC block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 ///
 /// wolfCrypt maintains the IV state (last ciphertext block) internally, so
@@ -3781,7 +3766,6 @@ impl BlockModeDecrypt for Aes128CbcDec {
     }
 }
 
-#[cfg(all(aes_cbc, feature = "cipher"))]
 /// AES-192 CBC block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 #[cfg(all(aes_cbc, feature = "cipher"))]
 pub struct Aes192CbcDec {
@@ -3841,7 +3825,6 @@ impl BlockModeDecrypt for Aes192CbcDec {
     }
 }
 
-#[cfg(all(aes_cbc, feature = "cipher"))]
 /// AES-256 CBC block cipher (decryption) implementing [`cipher::BlockModeDecrypt`].
 #[cfg(all(aes_cbc, feature = "cipher"))]
 pub struct Aes256CbcDec {
