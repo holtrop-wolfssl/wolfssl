@@ -3884,7 +3884,6 @@ impl BlockModeDecrypt for Aes256CbcDec {
     }
 }
 
-#[cfg(all(aes_cbc, feature = "cipher"))]
 fn new_ws_aes(heap: Option<*mut core::ffi::c_void>, dev_id: Option<i32>) -> Result<sys::Aes, i32> {
     let heap = match heap {
         Some(heap) => heap,
