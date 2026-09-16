@@ -487,6 +487,22 @@ WOLFSSL_API int  wc_RsaPublicKeyDecodeRaw(const byte* n, word32 nSz,
 #define WC_RSA_PSS_PAD     2
 #define WC_RSA_NO_PAD      3
 
+/* RSAES-OAEP availability: 1 when the OAEP padding code is compiled in, 0
+ * when WC_NO_RSA_OAEP left it out.  Always defined when the _ex() padding
+ * API below exists, so test the value -- #ifdef is true either way.
+ *
+ * The wc_Rsa*_ex() functions are declared unconditionally, and a
+ * WC_RSA_NO_PADDING build defines two of them even with WC_NO_RSA_OAEP set,
+ * so their presence does not tell whether WC_RSA_OAEP_PAD actually works.
+ * Passing WC_RSA_OAEP_PAD to them returns RSA_PAD_E when this macro is 0.
+ * Consumers that can only see the headers -- language bindings generating
+ * FFI declarations, for instance -- need this macro to detect OAEP. */
+#ifdef WC_NO_RSA_OAEP
+    #define WC_RSA_OAEP_SUPPORT 0
+#else
+    #define WC_RSA_OAEP_SUPPORT 1
+#endif
+
 WOLFSSL_API int  wc_RsaPublicEncrypt_ex(const byte* in, word32 inLen, byte* out,
                    word32 outLen, RsaKey* key, WC_RNG* rng, int type,
                    enum wc_HashType hash, int mgf, byte* label, word32 labelSz);

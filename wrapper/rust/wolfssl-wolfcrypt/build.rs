@@ -437,7 +437,20 @@ fn read_file(path: String) -> Result<String> {
     Ok(content)
 }
 
-fn check_cfg(binding: &str, function_name: &str, cfg_name: &str) -> bool {
+/// Declare `cfg_name` to rustc and emit it when `enabled`.
+///
+/// Returns `enabled`.
+fn set_cfg(cfg_name: &str, enabled: bool) -> bool {
+    println!("cargo::rustc-check-cfg=cfg({})", cfg_name);
+    if enabled {
+        println!("cargo:rustc-cfg={}", cfg_name);
+    }
+    enabled
+}
+
+/// Returns true if `function_name`, or the `_fips` variant of it, appears in
+/// the generated bindings.
+fn binding_has_symbol(binding: &str, function_name: &str) -> bool {
     let pattern = format!(r"\b{}(_fips)?\b", function_name);
     let re = match Regex::new(&pattern) {
         Ok(r) => r,
@@ -446,13 +459,25 @@ fn check_cfg(binding: &str, function_name: &str, cfg_name: &str) -> bool {
             std::process::exit(1);
         }
     };
-    println!("cargo::rustc-check-cfg=cfg({})", cfg_name);
-    if re.is_match(binding) {
-        println!("cargo:rustc-cfg={}", cfg_name);
-        true
-    } else {
-        false
-    }
+    re.is_match(binding)
+}
+
+/// Returns the value of the integer constant `name` in the generated
+/// bindings, or `None` when the bindings do not define it.
+fn binding_const_value(binding: &str, name: &str) -> Option<i64> {
+    let pattern = format!(r"\b{}\s*:\s*\w+\s*=\s*(-?\d+)\s*;", name);
+    let re = match Regex::new(&pattern) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error compiling regex '{}': {}", pattern, e);
+            std::process::exit(1);
+        }
+    };
+    re.captures(binding)?.get(1)?.as_str().parse().ok()
+}
+
+fn check_cfg(binding: &str, function_name: &str, cfg_name: &str) -> bool {
+    set_cfg(cfg_name, binding_has_symbol(binding, function_name))
 }
 
 fn scan_cfg() -> Result<()> {
@@ -591,7 +616,18 @@ fn scan_cfg() -> Result<()> {
     check_cfg(&binding, "wc_RsaDirect", "rsa_direct");
     check_cfg(&binding, "wc_MakeRsaKey", "rsa_keygen");
     check_cfg(&binding, "wc_RsaPSS_Sign", "rsa_pss");
-    check_cfg(&binding, "wc_RsaPublicEncrypt_ex", "rsa_oaep");
+    // RSAES-OAEP cannot be probed through wc_RsaPublicEncrypt_ex(): rsa.h
+    // declares it unconditionally, and a WC_RSA_NO_PADDING build even defines
+    // it when WC_NO_RSA_OAEP compiled the OAEP padding out, in which case the
+    // call links but always returns RSA_PAD_E.  Probe the WC_RSA_OAEP_SUPPORT
+    // sentinel, which is 1 only when OAEP is really built in.  wolfSSL
+    // versions predating the sentinel do not define it; there the symbol is
+    // all we have, and using it keeps the long-standing behavior.
+    set_cfg("rsa_oaep",
+        match binding_const_value(&binding, "WC_RSA_OAEP_SUPPORT") {
+            Some(supported) => supported != 0,
+            None => binding_has_symbol(&binding, "wc_RsaPublicEncrypt_ex"),
+        });
     check_cfg(&binding, "wc_RsaSetRNG", "rsa_setrng");
     check_cfg(&binding, "WC_MGF1SHA512_224", "rsa_mgf1sha512_224");
     check_cfg(&binding, "WC_MGF1SHA512_256", "rsa_mgf1sha512_256");
