@@ -21,7 +21,7 @@
 
 /* SPAKE2+ (RFC 9383) augmented PAKE. API: wolfssl/wolfcrypt/spake2p.h
  *
- * Implemented so far: wc_Spake2pDeriveW0W1().
+ * Implemented so far: wc_Spake2pDeriveW0W1(), wc_Spake2pComputeL().
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -30,6 +30,7 @@
 
 #include <wolfssl/wolfcrypt/spake2p.h>
 #include <wolfssl/wolfcrypt/wolfmath.h>
+#include <wolfssl/wolfcrypt/ecc.h>
 
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
@@ -245,6 +246,167 @@ int wc_Spake2pDeriveW0W1(int suite,
     WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
 
     return ret;
+}
+
+#if defined(HAVE_ECC_KEY_IMPORT) && defined(HAVE_ECC_KEY_EXPORT)
+/* Check that a scalar is a valid private value for the suite's curve: exactly
+ * the group order length, and in [1, order - 1].
+ *
+ * @param  [in]  suite     WC_SPAKE2P_<suite>.
+ * @param  [in]  scalar    Big-endian scalar.
+ * @param  [in]  scalarSz  Length of scalar in bytes.
+ * @param  [in]  heap      Heap hint for temporary allocations.
+ * @return  0 when the scalar is valid.
+ * @return  BAD_FUNC_ARG when the suite is unknown or the scalar is invalid.
+ * @return  NOT_COMPILED_IN when the suite's curve is not compiled in.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on math error.
+ */
+static int spake2p_check_scalar(int suite, const byte* scalar,
+    word32 scalarSz, void* heap)
+{
+    int ret = 0;
+    int initDone = 0;
+    word32 orderSz = 0;
+    WC_DECLARE_VAR(order, mp_int, 1, heap);
+    WC_DECLARE_VAR(t, mp_int, 1, heap);
+
+    (void)heap;
+
+    WC_ALLOC_VAR_EX(order, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+        ret = MEMORY_E);
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(t, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        ret = mp_init_multi(order, t, NULL, NULL, NULL, NULL);
+        if (ret == 0) {
+            initDone = 1;
+        }
+    }
+
+    if (ret == 0) {
+        ret = spake2p_load_order(suite, order, &orderSz);
+    }
+    if ((ret == 0) && (scalarSz != orderSz)) {
+        ret = BAD_FUNC_ARG;
+    }
+    if (ret == 0) {
+        ret = mp_read_unsigned_bin(t, scalar, scalarSz);
+    }
+    if ((ret == 0) && (mp_iszero(t) || (mp_cmp(t, order) != MP_LT))) {
+        ret = BAD_FUNC_ARG;
+    }
+
+    if (initDone) {
+        mp_forcezero(t);
+        mp_clear(order);
+    }
+    WC_FREE_VAR_EX(t, heap, DYNAMIC_TYPE_ECC);
+    WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
+
+    return ret;
+}
+#endif /* HAVE_ECC_KEY_IMPORT && HAVE_ECC_KEY_EXPORT */
+
+/* Compute the Verifier's registration value L = w1 * P (RFC 9383,
+ * Section 3.2), where P is the generator of the suite's curve, encoded as a
+ * SEC1 uncompressed point (0x04 || X || Y).
+ *
+ * The scalar multiplication is done by wc_ecc_make_pub(), so it uses the
+ * library's timing-resistant implementation, or a crypto callback device
+ * when devId is set.
+ *
+ * @param  [in]       suite  WC_SPAKE2P_<suite>.
+ * @param  [in]       w1     w1 scalar, as output by wc_Spake2pDeriveW0W1().
+ * @param  [in]       w1Sz   Length of w1 in bytes (the group order length).
+ * @param  [out]      L      Buffer that receives the encoded point.
+ * @param  [in, out]  LSz    On in, size of L. On out, bytes written.
+ * @param  [in]       heap   Heap hint for temporary allocations.
+ * @param  [in]       devId  Device id for crypto callbacks, or
+ *                           INVALID_DEVID.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when a pointer is NULL, the suite is unknown, or w1
+ *          is not a valid scalar (wrong length, zero, or not less than the
+ *          group order).
+ * @return  BUFFER_E when *LSz is too small for the encoded point.
+ * @return  NOT_COMPILED_IN when the suite's curve, or ECC key import/export,
+ *          is not compiled in.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on ECC or math error.
+ */
+int wc_Spake2pComputeL(int suite, const byte* w1, word32 w1Sz,
+    byte* L, word32* LSz, void* heap, int devId)
+{
+#if defined(HAVE_ECC_KEY_IMPORT) && defined(HAVE_ECC_KEY_EXPORT)
+    int ret;
+    int curveId = 0;
+    int curveSz = 0;
+    int keyInit = 0;
+    WC_DECLARE_VAR(key, ecc_key, 1, heap);
+
+    (void)heap;
+
+    if ((w1 == NULL) || (L == NULL) || (LSz == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    ret = spake2p_suite_curve(suite, &curveId);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* Validates the curve is compiled in and w1 is in [1, order - 1]. */
+    ret = spake2p_check_scalar(suite, w1, w1Sz, heap);
+    if (ret == 0) {
+        curveSz = wc_ecc_get_curve_size_from_id(curveId);
+        if (curveSz <= 0) {
+            ret = NOT_COMPILED_IN;
+        }
+    }
+    if ((ret == 0) && (*LSz < (word32)(1 + 2 * curveSz))) {
+        ret = BUFFER_E;
+    }
+
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(key, ecc_key, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        ret = wc_ecc_init_ex(key, heap, devId);
+        if (ret == 0) {
+            keyInit = 1;
+        }
+    }
+    if (ret == 0) {
+        ret = wc_ecc_import_private_key_ex(w1, w1Sz, NULL, 0, key, curveId);
+    }
+    if (ret == 0) {
+        /* No output point: the public part is cached in the key. */
+        ret = wc_ecc_make_pub(key, NULL);
+    }
+    if (ret == 0) {
+        ret = wc_ecc_export_x963(key, L, LSz);
+    }
+
+    if (keyInit) {
+        /* Zeroizes the private scalar. */
+        wc_ecc_free(key);
+    }
+    WC_FREE_VAR_EX(key, heap, DYNAMIC_TYPE_ECC);
+
+    return ret;
+#else
+    (void)suite;
+    (void)w1;
+    (void)w1Sz;
+    (void)L;
+    (void)LSz;
+    (void)heap;
+    (void)devId;
+
+    return NOT_COMPILED_IN;
+#endif /* HAVE_ECC_KEY_IMPORT && HAVE_ECC_KEY_EXPORT */
 }
 
 #endif /* WOLFSSL_HAVE_SPAKE2P */

@@ -631,14 +631,20 @@ int wc_Spake2pDeriveW0W1(int suite,
 
     \return 0 on success.
     \return BAD_FUNC_ARG if any pointer is NULL, the suite is unknown, or
-    w1 is not a valid scalar (zero, or not less than the group order).
-    \return BUFFER_E if *LSz is too small for the encoded point.
-    \return NOT_COMPILED_IN if the suite's curve is not compiled in.
+    w1 is not a valid scalar (not exactly the group order length, zero, or
+    not less than the group order).
+    \return BUFFER_E if *LSz is too small for the encoded point. Nothing is
+    written to L.
+    \return NOT_COMPILED_IN if the suite's curve is not compiled in, or the
+    build excludes ECC key import or export (NO_ECC_KEY_IMPORT,
+    NO_ECC_KEY_EXPORT).
+    \return MEMORY_E if a temporary cannot be allocated.
     \return <0 on other errors.
 
     \param suite the ciphersuite, one of WC_SPAKE2P_*.
     \param w1 the w1 scalar, as output by wc_Spake2pDeriveW0W1().
-    \param w1Sz length of w1 in bytes.
+    \param w1Sz length of w1 in bytes; must equal the group order length
+    (32, 48, or 66 bytes), as output by wc_Spake2pDeriveW0W1().
     \param L buffer that receives the encoded point.
     WC_SPAKE2P_MAX_L_SZ bytes is always enough.
     \param LSz on input, the size of L; on output, the number of bytes
