@@ -405,7 +405,12 @@ int wc_Spake2pComputeL(int suite, const byte* w1, word32 w1Sz,
         return ret;
     }
 
-    /* Validates the curve is compiled in and w1 is in [1, order - 1]. */
+    /* Check the curve is compiled in, w1 is exactly the order length, and w1
+     * is in [1, order - 1]. wc_ecc_import_private_key_ex() below also range
+     * checks, but returns ECC_PRIV_KEY_E rather than the documented
+     * BAD_FUNC_ARG, and accepts any length (on CAAM, curve size + MAC length
+     * is taken as an encrypted black key). Checking first also fails before
+     * the ECC key is allocated. */
     ret = spake2p_check_scalar(suite, w1, w1Sz, heap);
     if (ret == 0) {
         curveSz = wc_ecc_get_curve_size_from_id(curveId);
