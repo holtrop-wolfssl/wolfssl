@@ -1027,12 +1027,24 @@ int wc_Spake2pSetVerifierSecrets(wc_Spake2p* ctx,
     and no fixed ephemeral scalar was set.
     \return BAD_STATE_E if the secrets have not been loaded, or a share was
     already generated.
-    \return BUFFER_E if *shareSz is too small.
-    \return <0 on RNG or ECC errors.
+    \return BUFFER_E if *shareSz is too small. Nothing is written to
+    share.
+    \return ECC_INF_E if the computed share is the point at infinity. With
+    a random ephemeral scalar this has negligible probability.
+    \return NOT_COMPILED_IN if no implementation of the point arithmetic is
+    available for the suite's curve (a WOLFSSL_SP_MATH build without the
+    single-precision code for that curve).
+    \return MEMORY_E if a temporary cannot be allocated.
+    \return <0 on other RNG, ECC or math errors.
+
+    On any error the context keeps its secrets and has no share, so the call
+    may be retried; a randomly generated ephemeral scalar is zeroized.
 
     \param ctx a context with secrets loaded.
-    \param rng an initialized RNG. Not used if a fixed ephemeral scalar was
-    set with wc_Spake2pSetEphemeral() (test builds only).
+    \param rng an initialized RNG. The ephemeral scalar is drawn from it
+    unless a fixed one was set with wc_Spake2pSetEphemeral() (test builds
+    only); when not NULL it is also used to blind the scalar multiplications
+    in builds without single-precision ECC code for the curve.
     \param share buffer that receives the encoded share.
     WC_SPAKE2P_MAX_SHARE_SZ bytes is always enough.
     \param shareSz on input, the size of share; on output, the number of

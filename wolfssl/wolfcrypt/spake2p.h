@@ -141,7 +141,9 @@ typedef struct wc_Spake2p {
     byte   suite;                   /* WC_SPAKE2P_<suite>.                   */
     byte   role;                    /* WC_SPAKE2P_PROVER or _VERIFIER.       */
     byte   state;                   /* WC_SPAKE2P_STATE_*.                   */
+#ifdef WOLFSSL_SPAKE2P_TEST_HOOKS
     byte   ephSet;                  /* Ephemeral scalar fixed for testing.   */
+#endif
 
     /* Transcript inputs (owned copies, may be NULL with size 0). */
     byte*  context;

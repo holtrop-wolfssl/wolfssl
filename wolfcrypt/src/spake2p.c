@@ -24,7 +24,8 @@
  * Implemented so far: wc_Spake2pDeriveW0W1(), wc_Spake2pComputeL(),
  * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete(),
  * wc_Spake2pSetContext(), wc_Spake2pSetIdentities(),
- * wc_Spake2pSetProverSecrets(), wc_Spake2pSetVerifierSecrets().
+ * wc_Spake2pSetProverSecrets(), wc_Spake2pSetVerifierSecrets(),
+ * wc_Spake2pGenerateShare().
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -34,6 +35,18 @@
 #include <wolfssl/wolfcrypt/spake2p.h>
 #include <wolfssl/wolfcrypt/wolfmath.h>
 #include <wolfssl/wolfcrypt/ecc.h>
+#ifdef WOLFSSL_HAVE_SP_ECC
+    #include <wolfssl/wolfcrypt/sp.h>
+#endif
+
+/* Whether the ephemeral scalar was fixed with wc_Spake2pSetEphemeral(). The
+ * field only exists in test-hook builds; everywhere else this is the constant
+ * 0, so the fixed-ephemeral code is compiled out of production builds. */
+#ifdef WOLFSSL_SPAKE2P_TEST_HOOKS
+    #define SPAKE2P_EPH_FIXED(ctx)  ((ctx)->ephSet)
+#else
+    #define SPAKE2P_EPH_FIXED(ctx)  0
+#endif
 
 #ifdef NO_INLINE
     #include <wolfssl/wolfcrypt/misc.h>
@@ -940,6 +953,427 @@ int wc_Spake2pSetVerifierSecrets(wc_Spake2p* ctx,
 
     return NOT_COMPILED_IN;
 #endif /* HAVE_ECC_KEY_IMPORT */
+}
+
+/* ------------------------------------------------------------------------- */
+/* Online exchange                                                           */
+/* ------------------------------------------------------------------------- */
+
+/* RFC 9383, Section 4: the fixed points M and N for each curve, as affine
+ * coordinates. RFC 9383 gives them as compressed SEC1 points; these are the
+ * same points uncompressed, so no point decompression is needed at run time.
+ *
+ *   P-256 M = 02886e2f97ace46e55ba9dd7242579f2993b64e16ef3dcab95afd497333d8fa12f
+ *   P-256 N = 03d8bbd6c639c62937b04d997f38c3770719c629d7014d49a24b4f98baa1292b49
+ *   P-384 M = 030ff0895ae5ebf6187080a82d82b42e2765e3b2f8749c7e05eba366434b363d3dc
+ *             36f15314739074d2eb8613fceec2853
+ *   P-384 N = 02c72cf2e390853a1c1c4ad816a62fd15824f56078918f43f922ca21518f9c543bb
+ *             252c5490214cf9aa3f0baab4b665c10
+ *   P-521 M = 02003f06f38131b2ba2600791e82488e8d20ab889af753a41806c5db18d37d85608
+ *             cfae06b82e4a72cd744c719193562a653ea1f119eef9356907edc9b56979962d7aa
+ *   P-521 N = 0200c7924b9ec017f3094562894336a53c50167ba8c5963876880542bc669e494b25
+ *             32d76c5b53dfb349fdf69154b9e0048c58a42e8ed04cef052a3bc349d95575cd25
+ */
+typedef struct Spake2pFixedPoints {
+    int         curveId;
+    const char* mx;
+    const char* my;
+    const char* nx;
+    const char* ny;
+} Spake2pFixedPoints;
+
+static const Spake2pFixedPoints spake2p_fixed_points[] = {
+    { ECC_SECP256R1,
+      "886E2F97ACE46E55BA9DD7242579F2993B64E16EF3DCAB95AFD497333D8FA12F",
+      "5FF355163E43CE224E0B0E65FF02AC8E5C7BE09419C785E0CA547D55A12E2D20",
+      "D8BBD6C639C62937B04D997F38C3770719C629D7014D49A24B4F98BAA1292B49",
+      "07D60AA6BFADE45008A636337F5168C64D9BD36034808CD564490B1E656EDBE7" },
+    { ECC_SECP384R1,
+      "0FF0895AE5EBF6187080A82D82B42E2765E3B2F8749C7E05EBA366434B363D3D"
+      "C36F15314739074D2EB8613FCEEC2853",
+      "97592C55797CDD77C0715CB7DF2150220A0119866486AF4234F390AAD1F6ADDD"
+      "E5930909ADC67A1FC0C99BA3D52DC5DD",
+      "C72CF2E390853A1C1C4AD816A62FD15824F56078918F43F922CA21518F9C543B"
+      "B252C5490214CF9AA3F0BAAB4B665C10",
+      "C38B7D7F4E7F320317CD717315A797C7E02933AEF68B364CBF84EBC619BEDBE2"
+      "1FF5C69EA0F1FED5D7E3200418073F40" },
+    { ECC_SECP521R1,
+      "003F06F38131B2BA2600791E82488E8D20AB889AF753A41806C5DB18D37D8560"
+      "8CFAE06B82E4A72CD744C719193562A653EA1F119EEF9356907EDC9B56979962"
+      "D7AA",
+      "01BDD179A3D547610892E9B96DEA1EAB10BDD7AC5AE0CF75AA0F853BFD185CF7"
+      "82F894301998B11D1898EDE2701DCA37A2BB50B4F519C3D89A7D054B51FB8491"
+      "2192",
+      "00C7924B9EC017F3094562894336A53C50167BA8C5963876880542BC669E494B"
+      "2532D76C5B53DFB349FDF69154B9E0048C58A42E8ED04CEF052A3BC349D95575"
+      "CD25",
+      "01C62BEE650C9287A651BB75C7F39A2006873347B769840D261D17760B107E29"
+      "F091D556A82A2E4CDE0C40B84B95B878DB2489EF760206424B3FE7968AA8E0B1"
+      "F334" },
+};
+
+/* Load M or N for a curve into an affine point (z = 1).
+ *
+ * @param  [in]   curveId  ECC curve id.
+ * @param  [in]   useN     0 for M, 1 for N.
+ * @param  [out]  pt       Initialized point.
+ * @return  0 on success.
+ * @return  NOT_COMPILED_IN when the curve has no fixed points.
+ * @return  Other negative value on math error.
+ */
+static int spake2p_load_fixed_point(int curveId, int useN, ecc_point* pt)
+{
+    int ret = NOT_COMPILED_IN;
+    word32 i;
+
+    for (i = 0; i < (word32)(sizeof(spake2p_fixed_points) /
+            sizeof(spake2p_fixed_points[0])); i++) {
+        const Spake2pFixedPoints* fp = &spake2p_fixed_points[i];
+        if (fp->curveId == curveId) {
+            ret = mp_read_radix(pt->x, useN ? fp->nx : fp->mx, MP_RADIX_HEX);
+            if (ret == 0) {
+                ret = mp_read_radix(pt->y, useN ? fp->ny : fp->my,
+                    MP_RADIX_HEX);
+            }
+            if (ret == 0) {
+                ret = mp_set(pt->z, 1);
+            }
+            break;
+        }
+    }
+
+    return ret;
+}
+
+/* Compute R = k * G + s * Q, mapped to affine, where G is the curve's
+ * generator. Both scalar multiplications are constant time in the scalar:
+ * the single-precision code when it is compiled in for the curve, otherwise
+ * wc_ecc_mulmod_ex2() (timing resistant, and blinded when rng is not NULL).
+ *
+ * @param  [in]   dp     Curve parameters.
+ * @param  [in]   k      Scalar for G, in [1, order - 1].
+ * @param  [in]   s      Scalar for Q, in [1, order - 1].
+ * @param  [in]   Q      Affine point on the curve.
+ * @param  [out]  R      Initialized point; receives the affine result.
+ * @param  [in]   rng    RNG for blinding, or NULL.
+ * @param  [in]   heap   Heap hint for temporary allocations.
+ * @return  0 on success.
+ * @return  ECC_INF_E when the result is the point at infinity.
+ * @return  NOT_COMPILED_IN when no implementation is available for the
+ *          curve.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on ECC or math error.
+ */
+static int spake2p_mul_add(const ecc_set_type* dp, mp_int* k, mp_int* s,
+    ecc_point* Q, ecc_point* R, WC_RNG* rng, void* heap)
+{
+    int ret = NOT_COMPILED_IN;
+    int done = 0;
+    ecc_point* T = NULL;
+
+    T = wc_ecc_new_point_h(heap);
+    if (T == NULL) {
+        return MEMORY_E;
+    }
+
+#ifdef WOLFSSL_HAVE_SP_ECC
+    /* T = s * Q, then R = k * G + T, using the precomputed table for G. */
+#ifndef WOLFSSL_SP_NO_256
+    if (dp->id == ECC_SECP256R1) {
+        ret = sp_ecc_mulmod_256(s, Q, T, 1, heap);
+        if (ret == 0) {
+            ret = sp_ecc_mulmod_base_add_256(k, T, 0, R, 1, heap);
+        }
+        done = 1;
+    }
+#endif
+#ifdef WOLFSSL_SP_384
+    if (dp->id == ECC_SECP384R1) {
+        ret = sp_ecc_mulmod_384(s, Q, T, 1, heap);
+        if (ret == 0) {
+            ret = sp_ecc_mulmod_base_add_384(k, T, 0, R, 1, heap);
+        }
+        done = 1;
+    }
+#endif
+#ifdef WOLFSSL_SP_521
+    if (dp->id == ECC_SECP521R1) {
+        ret = sp_ecc_mulmod_521(s, Q, T, 1, heap);
+        if (ret == 0) {
+            ret = sp_ecc_mulmod_base_add_521(k, T, 0, R, 1, heap);
+        }
+        done = 1;
+    }
+#endif
+#endif /* WOLFSSL_HAVE_SP_ECC */
+
+#if !defined(WOLFSSL_SP_MATH)
+    if (!done) {
+        /* Generic math: both products left in Montgomery projective form,
+         * added with the exception-safe projective add, then mapped. */
+        ecc_point* G = NULL;
+        int infinity = 0;
+        mp_digit mp = 0;
+        int initDone = 0;
+        WC_DECLARE_VAR(a, mp_int, 1, heap);
+        WC_DECLARE_VAR(prime, mp_int, 1, heap);
+        WC_DECLARE_VAR(order, mp_int, 1, heap);
+
+        ret = 0;
+        WC_ALLOC_VAR_EX(a, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+        if (ret == 0) {
+            WC_ALLOC_VAR_EX(prime, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+                ret = MEMORY_E);
+        }
+        if (ret == 0) {
+            WC_ALLOC_VAR_EX(order, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+                ret = MEMORY_E);
+        }
+        if (ret == 0) {
+            ret = mp_init_multi(a, prime, order, NULL, NULL, NULL);
+            if (ret == 0) {
+                initDone = 1;
+            }
+        }
+        if (ret == 0) {
+            G = wc_ecc_new_point_h(heap);
+            if (G == NULL) {
+                ret = MEMORY_E;
+            }
+        }
+        if (ret == 0) {
+            ret = mp_read_radix(a, dp->Af, MP_RADIX_HEX);
+        }
+        if (ret == 0) {
+            ret = mp_read_radix(prime, dp->prime, MP_RADIX_HEX);
+        }
+        if (ret == 0) {
+            ret = mp_read_radix(order, dp->order, MP_RADIX_HEX);
+        }
+        if (ret == 0) {
+            ret = mp_read_radix(G->x, dp->Gx, MP_RADIX_HEX);
+        }
+        if (ret == 0) {
+            ret = mp_read_radix(G->y, dp->Gy, MP_RADIX_HEX);
+        }
+        if (ret == 0) {
+            ret = mp_set(G->z, 1);
+        }
+        if (ret == 0) {
+            ret = wc_ecc_mulmod_ex2(k, G, R, a, prime, order, rng, 0, heap);
+        }
+        if (ret == 0) {
+            ret = wc_ecc_mulmod_ex2(s, Q, T, a, prime, order, rng, 0, heap);
+        }
+        if (ret == 0) {
+            ret = mp_montgomery_setup(prime, &mp);
+        }
+        if (ret == 0) {
+            ret = ecc_projective_add_point_safe(R, T, R, a, prime, mp,
+                &infinity);
+            if ((ret == 0) && infinity) {
+                ret = ECC_INF_E;
+            }
+        }
+        if (ret == 0) {
+            ret = ecc_map_ex(R, prime, mp, 1);
+        }
+
+        if (G != NULL) {
+            wc_ecc_del_point_h(G, heap);
+        }
+        if (initDone) {
+            mp_clear(order);
+            mp_clear(prime);
+            mp_clear(a);
+        }
+        WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
+        WC_FREE_VAR_EX(prime, heap, DYNAMIC_TYPE_ECC);
+        WC_FREE_VAR_EX(a, heap, DYNAMIC_TYPE_ECC);
+        done = 1;
+    }
+#endif /* !WOLFSSL_SP_MATH */
+
+    /* The SP code maps the identity to (0, 0). */
+    if ((ret == 0) && mp_iszero(R->x) && mp_iszero(R->y)) {
+        ret = ECC_INF_E;
+    }
+
+    /* T held s * Q, which is secret. */
+    wc_ecc_forcezero_point(T);
+    wc_ecc_del_point_h(T, heap);
+    (void)done;
+    (void)rng;
+    (void)heap;
+
+    return ret;
+}
+
+/* Generate this side's ephemeral scalar and public share (RFC 9383,
+ * Section 3.3):
+ *   Prover:   x random in [1, p - 1], shareP = x * P + w0 * M
+ *   Verifier: y random in [1, p - 1], shareV = y * P + w0 * N
+ * The share is written as a SEC1 uncompressed point.
+ *
+ * On error the context is left with its secrets loaded and no share, so the
+ * call can be retried; a randomly generated ephemeral is zeroized.
+ *
+ * @param  [in, out]  ctx      Context with secrets loaded.
+ * @param  [in]       rng      Initialized RNG. Not used for the ephemeral
+ *                             when one was fixed for testing, but still used
+ *                             for blinding when not NULL.
+ * @param  [out]      share    Buffer that receives the encoded share.
+ * @param  [in, out]  shareSz  On in, size of share. On out, bytes written.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when ctx, share or shareSz is NULL, or rng is NULL
+ *          and no ephemeral was fixed.
+ * @return  BAD_STATE_E when the secrets are not loaded, or a share was
+ *          already generated.
+ * @return  BUFFER_E when *shareSz is too small.
+ * @return  ECC_INF_E when the share is the point at infinity (negligible
+ *          probability with a random ephemeral).
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on RNG, ECC or math error.
+ */
+int wc_Spake2pGenerateShare(wc_Spake2p* ctx, WC_RNG* rng, byte* share,
+    word32* shareSz)
+{
+    int ret;
+    int curveId = 0;
+    int idx;
+    int initDone = 0;
+    word32 fs = 0;
+    word32 orderSz = 0;
+    const ecc_set_type* dp = NULL;
+    ecc_point* Q = NULL;
+    ecc_point* R = NULL;
+    void* heap;
+    WC_DECLARE_VAR(order, mp_int, 1, NULL);
+    WC_DECLARE_VAR(k, mp_int, 1, NULL);
+    WC_DECLARE_VAR(w0, mp_int, 1, NULL);
+
+    if ((ctx == NULL) || (share == NULL) || (shareSz == NULL) ||
+            ((rng == NULL) && !SPAKE2P_EPH_FIXED(ctx))) {
+        return BAD_FUNC_ARG;
+    }
+    if (ctx->state != WC_SPAKE2P_STATE_SECRETS) {
+        return BAD_STATE_E;
+    }
+    heap = ctx->heap;
+
+    ret = spake2p_suite_curve(ctx->suite, &curveId);
+    if (ret == 0) {
+        idx = wc_ecc_get_curve_idx(curveId);
+        if (idx >= 0) {
+            dp = wc_ecc_get_curve_params(idx);
+        }
+        if (dp == NULL) {
+            ret = NOT_COMPILED_IN;
+        }
+    }
+    if (ret == 0) {
+        fs = (word32)dp->size;
+        if (*shareSz < 1 + 2 * fs) {
+            ret = BUFFER_E;
+        }
+    }
+    if (ret != 0) {
+        return ret;
+    }
+
+    WC_ALLOC_VAR_EX(order, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+        ret = MEMORY_E);
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(k, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(w0, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        ret = mp_init_multi(order, k, w0, NULL, NULL, NULL);
+        if (ret == 0) {
+            initDone = 1;
+        }
+    }
+    if (ret == 0) {
+        Q = wc_ecc_new_point_h(heap);
+        R = wc_ecc_new_point_h(heap);
+        if ((Q == NULL) || (R == NULL)) {
+            ret = MEMORY_E;
+        }
+    }
+
+    if (ret == 0) {
+        ret = spake2p_load_order(ctx->suite, order, &orderSz);
+    }
+    if (ret == 0) {
+        if (SPAKE2P_EPH_FIXED(ctx)) {
+            /* Fixed for testing; validated when it was set. */
+            ret = mp_read_unsigned_bin(k, ctx->eph, ctx->ephSz);
+        }
+        else {
+            /* Uniform in [1, order - 1]. */
+            ret = wc_ecc_gen_k(rng, (int)fs, k, order);
+        }
+    }
+    if (ret == 0) {
+        ret = mp_read_unsigned_bin(w0, ctx->w0, ctx->w0Sz);
+    }
+    if (ret == 0) {
+        ret = spake2p_load_fixed_point(curveId,
+            ctx->role == WC_SPAKE2P_VERIFIER, Q);
+    }
+    if (ret == 0) {
+        ret = spake2p_mul_add(dp, k, w0, Q, R, rng, heap);
+    }
+
+    if (ret == 0) {
+        ctx->share[0] = ECC_POINT_UNCOMP;
+        ret = mp_to_unsigned_bin_len(R->x, ctx->share + 1, (int)fs);
+    }
+    if (ret == 0) {
+        ret = mp_to_unsigned_bin_len(R->y, ctx->share + 1 + fs, (int)fs);
+    }
+    if ((ret == 0) && !SPAKE2P_EPH_FIXED(ctx)) {
+        ret = mp_to_unsigned_bin_len(k, ctx->eph, (int)orderSz);
+        ctx->ephSz = orderSz;
+    }
+
+    if (ret == 0) {
+        ctx->shareSz = 1 + 2 * fs;
+        XMEMCPY(share, ctx->share, ctx->shareSz);
+        *shareSz = ctx->shareSz;
+        ctx->state = WC_SPAKE2P_STATE_SHARE;
+    }
+    else {
+        ForceZero(ctx->share, sizeof(ctx->share));
+        ctx->shareSz = 0;
+        if (!SPAKE2P_EPH_FIXED(ctx)) {
+            ForceZero(ctx->eph, sizeof(ctx->eph));
+            ctx->ephSz = 0;
+        }
+    }
+
+    if (R != NULL) {
+        wc_ecc_del_point_h(R, heap);
+    }
+    if (Q != NULL) {
+        wc_ecc_del_point_h(Q, heap);
+    }
+    if (initDone) {
+        mp_forcezero(w0);
+        mp_forcezero(k);
+        mp_clear(order);
+    }
+    WC_FREE_VAR_EX(w0, heap, DYNAMIC_TYPE_ECC);
+    WC_FREE_VAR_EX(k, heap, DYNAMIC_TYPE_ECC);
+    WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
+    (void)heap;
+
+    return ret;
 }
 
 #endif /* WOLFSSL_HAVE_SPAKE2P */
