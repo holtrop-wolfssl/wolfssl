@@ -223,6 +223,12 @@
     Both are optional and default to empty. They must be set before
     wc_Spake2pGenerateShare().
 
+    An empty context is still included in the transcript, as a zero length.
+    RFC 9383 also allows the context and its length to be left out of the
+    transcript entirely; this implementation never does that, so it does not
+    interoperate with a peer that omits an empty context. Both forms are the
+    same when the context is non-empty.
+
     \section spake2p_security Security Requirements
 
     - <b>Use K_shared only after confirmation.</b>
@@ -1072,12 +1078,17 @@ int wc_Spake2pGenerateShare(wc_Spake2p* ctx, WC_RNG* rng,
     outputs this side's confirmation MAC.
 
     This function:
-    -# Validates the peer share: it must be a correctly encoded point on
-       the curve and must not be the point at infinity.
-    -# Computes the shared points Z and V.
+    -# Validates the peer share: it must be a SEC1 uncompressed point on
+       the curve and must not be the point at infinity (RFC 9383 Section 6
+       requires aborting otherwise).
+    -# Computes the shared points Z and V; aborts if either, or the
+       intermediate peerShare - w0*N (or - w0*M), is the point at infinity.
     -# Builds the RFC 9383 transcript from the context, identities, M, N,
-       both shares, Z, V and w0, and hashes it to K_main.
-    -# Derives the confirmation keys and K_shared from K_main with HKDF.
+       both shares, Z, V and w0, and hashes it to K_main. An empty context
+       is included as a zero length.
+    -# Derives the confirmation keys and K_shared from K_main with HKDF,
+       using no salt. Confirmation keys are the hash length for HMAC suites
+       and 16 bytes for CMAC suites; K_shared is the hash length.
     -# Outputs this side's confirmation MAC:
        - Prover: confirmP = MAC(K_confirmP, shareV)
        - Verifier: confirmV = MAC(K_confirmV, shareP)
@@ -1090,18 +1101,30 @@ int wc_Spake2pGenerateShare(wc_Spake2p* ctx, WC_RNG* rng,
     wc_Spake2pVerifyPeerConfirm() has accepted confirmV, and must not send
     it if verification fails.
 
-    On failure, the context enters a failed state and all further calls
-    except wc_Spake2pFree() return BAD_STATE_E.
+    K_main and the ephemeral scalar are zeroized before returning, whether
+    or not the call succeeds.
+
+    BAD_FUNC_ARG, BAD_STATE_E and BUFFER_E leave the context unchanged, so
+    the call may be repeated with corrected arguments. Any other failure
+    puts the context in a failed state: all further calls except
+    wc_Spake2pFree() return BAD_STATE_E.
 
     \return 0 on success.
     \return BAD_FUNC_ARG if any pointer is NULL.
     \return BAD_STATE_E if wc_Spake2pGenerateShare() has not been called, or
     this function was already called.
-    \return BUFFER_E if *confirmSz is too small.
-    \return IS_POINT_E if the peer share is malformed or not on the curve.
-    \return ECC_INF_E if the peer share, or a computed point, is the point
-    at infinity.
-    \return <0 on other errors.
+    \return BUFFER_E if *confirmSz is too small. Nothing is written to
+    confirm.
+    \return IS_POINT_E if the peer share is malformed or not on the curve,
+    including any encoding other than SEC1 uncompressed of exactly
+    1 + 2 * (field size) bytes and the SEC1 infinity encoding 0x00.
+    \return ECC_INF_E if the peer share is 0x04 followed by all zero bytes,
+    or a computed point is the point at infinity (for example, a peer share
+    equal to w0*N).
+    \return NOT_COMPILED_IN if ECC key import is not compiled in
+    (NO_ECC_KEY_IMPORT).
+    \return MEMORY_E if a temporary cannot be allocated.
+    \return <0 on other ECC, hash or MAC errors.
 
     \param ctx a context after wc_Spake2pGenerateShare().
     \param peerShare the peer's share as received (shareV for the Prover,

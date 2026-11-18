@@ -25,7 +25,8 @@
  * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete(),
  * wc_Spake2pSetContext(), wc_Spake2pSetIdentities(),
  * wc_Spake2pSetProverSecrets(), wc_Spake2pSetVerifierSecrets(),
- * wc_Spake2pGenerateShare(), wc_Spake2pSetEphemeral() (test hooks only).
+ * wc_Spake2pGenerateShare(), wc_Spake2pProcessPeerShare(),
+ * wc_Spake2pSetEphemeral() (test hooks only).
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -35,6 +36,11 @@
 #include <wolfssl/wolfcrypt/spake2p.h>
 #include <wolfssl/wolfcrypt/wolfmath.h>
 #include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/hash.h>
+#include <wolfssl/wolfcrypt/hmac.h>
+#ifdef WOLFSSL_CMAC
+    #include <wolfssl/wolfcrypt/cmac.h>
+#endif
 #ifdef WOLFSSL_HAVE_SP_ECC
     #include <wolfssl/wolfcrypt/sp.h>
 #endif
@@ -1045,6 +1051,167 @@ static int spake2p_load_fixed_point(int curveId, int useN, ecc_point* pt)
     return ret;
 }
 
+#if !defined(WOLFSSL_SP_MATH)
+/* Curve parameters for the generic (non single-precision) point arithmetic. */
+typedef struct Spake2pCurveMath {
+    mp_int   a;
+    mp_int   prime;
+    mp_int   order;
+    mp_digit mp;
+    int      init;
+} Spake2pCurveMath;
+
+/* Load the generic-math parameters of a curve.
+ *
+ * @param  [in]   dp  Curve parameters.
+ * @param  [out]  m   Receives the parameters; free with spake2p_math_free().
+ * @return  0 on success.
+ * @return  Negative value on math error.
+ */
+static int spake2p_math_load(const ecc_set_type* dp, Spake2pCurveMath* m)
+{
+    int ret;
+
+    m->init = 0;
+    ret = mp_init_multi(&m->a, &m->prime, &m->order, NULL, NULL, NULL);
+    if (ret == 0) {
+        m->init = 1;
+        ret = mp_read_radix(&m->a, dp->Af, MP_RADIX_HEX);
+    }
+    if (ret == 0) {
+        ret = mp_read_radix(&m->prime, dp->prime, MP_RADIX_HEX);
+    }
+    if (ret == 0) {
+        ret = mp_read_radix(&m->order, dp->order, MP_RADIX_HEX);
+    }
+    if (ret == 0) {
+        ret = mp_montgomery_setup(&m->prime, &m->mp);
+    }
+
+    return ret;
+}
+
+/* Free parameters loaded by spake2p_math_load(). The values are public. */
+static void spake2p_math_free(Spake2pCurveMath* m)
+{
+    if (m->init) {
+        mp_clear(&m->order);
+        mp_clear(&m->prime);
+        mp_clear(&m->a);
+        m->init = 0;
+    }
+}
+
+/* Convert an affine point to Montgomery-form projective coordinates, as
+ * produced by wc_ecc_mulmod_ex2() with map = 0. Mirrors ecc_point_to_mont().
+ *
+ * @param  [in]   p     Affine point (z = 1).
+ * @param  [out]  r     Initialized point; receives the converted point.
+ * @param  [in]   m     Curve parameters.
+ * @param  [in]   heap  Heap hint for temporary allocations.
+ * @return  0 on success.
+ * @return  Negative value on math error.
+ */
+static int spake2p_point_to_mont(ecc_point* p, ecc_point* r,
+    Spake2pCurveMath* m, void* heap)
+{
+    int ret = 0;
+    WC_DECLARE_VAR(mu, mp_int, 1, heap);
+
+    (void)heap;
+
+    WC_ALLOC_VAR_EX(mu, mp_int, 1, heap, DYNAMIC_TYPE_ECC, ret = MEMORY_E);
+    if (ret == 0) {
+        ret = mp_init(mu);
+        if (ret == 0) {
+            ret = mp_montgomery_calc_normalization(mu, &m->prime);
+            if ((ret == 0) && (mp_cmp_d(mu, 1) == MP_EQ)) {
+                /* Montgomery form is the normal form. */
+                ret = mp_copy(p->x, r->x);
+                if (ret == 0) {
+                    ret = mp_copy(p->y, r->y);
+                }
+                if (ret == 0) {
+                    ret = mp_copy(p->z, r->z);
+                }
+            }
+            else if (ret == 0) {
+                ret = mp_mulmod(p->x, mu, &m->prime, r->x);
+                if (ret == 0) {
+                    ret = mp_mulmod(p->y, mu, &m->prime, r->y);
+                }
+                if (ret == 0) {
+                    ret = mp_mulmod(p->z, mu, &m->prime, r->z);
+                }
+            }
+            mp_clear(mu);
+        }
+    }
+    WC_FREE_VAR_EX(mu, heap, DYNAMIC_TYPE_ECC);
+
+    return ret;
+}
+#endif /* !WOLFSSL_SP_MATH */
+
+/* Single-precision dispatch for the curves SPAKE2+ uses. Each evaluates to 1
+ * and sets ret when the SP code for the curve is compiled in, else 0. */
+#ifdef WOLFSSL_HAVE_SP_ECC
+/* R = s * Q. */
+static int spake2p_sp_mul(int id, mp_int* s, ecc_point* Q, ecc_point* R,
+    void* heap, int* ret)
+{
+#ifndef WOLFSSL_SP_NO_256
+    if (id == ECC_SECP256R1) {
+        *ret = sp_ecc_mulmod_256(s, Q, R, 1, heap);
+        return 1;
+    }
+#endif
+#ifdef WOLFSSL_SP_384
+    if (id == ECC_SECP384R1) {
+        *ret = sp_ecc_mulmod_384(s, Q, R, 1, heap);
+        return 1;
+    }
+#endif
+#ifdef WOLFSSL_SP_521
+    if (id == ECC_SECP521R1) {
+        *ret = sp_ecc_mulmod_521(s, Q, R, 1, heap);
+        return 1;
+    }
+#endif
+    (void)id; (void)s; (void)Q; (void)R; (void)heap; (void)ret;
+    return 0;
+}
+
+/* R = s * Q + A, or s * G + A when Q is NULL. A is affine. */
+static int spake2p_sp_mul_add(int id, mp_int* s, ecc_point* Q, ecc_point* A,
+    ecc_point* R, void* heap, int* ret)
+{
+#ifndef WOLFSSL_SP_NO_256
+    if (id == ECC_SECP256R1) {
+        *ret = (Q == NULL) ? sp_ecc_mulmod_base_add_256(s, A, 0, R, 1, heap)
+                           : sp_ecc_mulmod_add_256(s, Q, A, 0, R, 1, heap);
+        return 1;
+    }
+#endif
+#ifdef WOLFSSL_SP_384
+    if (id == ECC_SECP384R1) {
+        *ret = (Q == NULL) ? sp_ecc_mulmod_base_add_384(s, A, 0, R, 1, heap)
+                           : sp_ecc_mulmod_add_384(s, Q, A, 0, R, 1, heap);
+        return 1;
+    }
+#endif
+#ifdef WOLFSSL_SP_521
+    if (id == ECC_SECP521R1) {
+        *ret = (Q == NULL) ? sp_ecc_mulmod_base_add_521(s, A, 0, R, 1, heap)
+                           : sp_ecc_mulmod_add_521(s, Q, A, 0, R, 1, heap);
+        return 1;
+    }
+#endif
+    (void)id; (void)s; (void)Q; (void)A; (void)R; (void)heap; (void)ret;
+    return 0;
+}
+#endif /* WOLFSSL_HAVE_SP_ECC */
+
 /* Compute R = k * G + s * Q, mapped to affine, where G is the curve's
  * generator. Both scalar multiplications are constant time in the scalar:
  * the single-precision code when it is compiled in for the curve, otherwise
@@ -1078,34 +1245,13 @@ static int spake2p_mul_add(const ecc_set_type* dp, mp_int* k, mp_int* s,
 
 #ifdef WOLFSSL_HAVE_SP_ECC
     /* T = s * Q, then R = k * G + T, using the precomputed table for G. */
-#ifndef WOLFSSL_SP_NO_256
-    if (dp->id == ECC_SECP256R1) {
-        ret = sp_ecc_mulmod_256(s, Q, T, 1, heap);
+    if (spake2p_sp_mul(dp->id, s, Q, T, heap, &ret)) {
         if (ret == 0) {
-            ret = sp_ecc_mulmod_base_add_256(k, T, 0, R, 1, heap);
+            (void)spake2p_sp_mul_add(dp->id, k, NULL, T, R, heap, &ret);
         }
         done = 1;
     }
 #endif
-#ifdef WOLFSSL_SP_384
-    if (dp->id == ECC_SECP384R1) {
-        ret = sp_ecc_mulmod_384(s, Q, T, 1, heap);
-        if (ret == 0) {
-            ret = sp_ecc_mulmod_base_add_384(k, T, 0, R, 1, heap);
-        }
-        done = 1;
-    }
-#endif
-#ifdef WOLFSSL_SP_521
-    if (dp->id == ECC_SECP521R1) {
-        ret = sp_ecc_mulmod_521(s, Q, T, 1, heap);
-        if (ret == 0) {
-            ret = sp_ecc_mulmod_base_add_521(k, T, 0, R, 1, heap);
-        }
-        done = 1;
-    }
-#endif
-#endif /* WOLFSSL_HAVE_SP_ECC */
 
 #if !defined(WOLFSSL_SP_MATH)
     if (!done) {
@@ -1113,43 +1259,19 @@ static int spake2p_mul_add(const ecc_set_type* dp, mp_int* k, mp_int* s,
          * added with the exception-safe projective add, then mapped. */
         ecc_point* G = NULL;
         int infinity = 0;
-        mp_digit mp = 0;
-        int initDone = 0;
-        WC_DECLARE_VAR(a, mp_int, 1, heap);
-        WC_DECLARE_VAR(prime, mp_int, 1, heap);
-        WC_DECLARE_VAR(order, mp_int, 1, heap);
+        WC_DECLARE_VAR(m, Spake2pCurveMath, 1, heap);
 
         ret = 0;
-        WC_ALLOC_VAR_EX(a, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+        WC_ALLOC_VAR_EX(m, Spake2pCurveMath, 1, heap, DYNAMIC_TYPE_ECC,
             ret = MEMORY_E);
         if (ret == 0) {
-            WC_ALLOC_VAR_EX(prime, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
-                ret = MEMORY_E);
-        }
-        if (ret == 0) {
-            WC_ALLOC_VAR_EX(order, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
-                ret = MEMORY_E);
-        }
-        if (ret == 0) {
-            ret = mp_init_multi(a, prime, order, NULL, NULL, NULL);
-            if (ret == 0) {
-                initDone = 1;
-            }
+            ret = spake2p_math_load(dp, m);
         }
         if (ret == 0) {
             G = wc_ecc_new_point_h(heap);
             if (G == NULL) {
                 ret = MEMORY_E;
             }
-        }
-        if (ret == 0) {
-            ret = mp_read_radix(a, dp->Af, MP_RADIX_HEX);
-        }
-        if (ret == 0) {
-            ret = mp_read_radix(prime, dp->prime, MP_RADIX_HEX);
-        }
-        if (ret == 0) {
-            ret = mp_read_radix(order, dp->order, MP_RADIX_HEX);
         }
         if (ret == 0) {
             ret = mp_read_radix(G->x, dp->Gx, MP_RADIX_HEX);
@@ -1161,36 +1283,31 @@ static int spake2p_mul_add(const ecc_set_type* dp, mp_int* k, mp_int* s,
             ret = mp_set(G->z, 1);
         }
         if (ret == 0) {
-            ret = wc_ecc_mulmod_ex2(k, G, R, a, prime, order, rng, 0, heap);
+            ret = wc_ecc_mulmod_ex2(k, G, R, &m->a, &m->prime, &m->order,
+                rng, 0, heap);
         }
         if (ret == 0) {
-            ret = wc_ecc_mulmod_ex2(s, Q, T, a, prime, order, rng, 0, heap);
+            ret = wc_ecc_mulmod_ex2(s, Q, T, &m->a, &m->prime, &m->order,
+                rng, 0, heap);
         }
         if (ret == 0) {
-            ret = mp_montgomery_setup(prime, &mp);
-        }
-        if (ret == 0) {
-            ret = ecc_projective_add_point_safe(R, T, R, a, prime, mp,
-                &infinity);
+            ret = ecc_projective_add_point_safe(R, T, R, &m->a, &m->prime,
+                m->mp, &infinity);
             if ((ret == 0) && infinity) {
                 ret = ECC_INF_E;
             }
         }
         if (ret == 0) {
-            ret = ecc_map_ex(R, prime, mp, 1);
+            ret = ecc_map_ex(R, &m->prime, m->mp, 1);
         }
 
         if (G != NULL) {
             wc_ecc_del_point_h(G, heap);
         }
-        if (initDone) {
-            mp_clear(order);
-            mp_clear(prime);
-            mp_clear(a);
+        if (WC_VAR_OK(m)) {
+            spake2p_math_free(m);
         }
-        WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
-        WC_FREE_VAR_EX(prime, heap, DYNAMIC_TYPE_ECC);
-        WC_FREE_VAR_EX(a, heap, DYNAMIC_TYPE_ECC);
+        WC_FREE_VAR_EX(m, heap, DYNAMIC_TYPE_ECC);
         done = 1;
     }
 #endif /* !WOLFSSL_SP_MATH */
@@ -1206,6 +1323,194 @@ static int spake2p_mul_add(const ecc_set_type* dp, mp_int* k, mp_int* s,
     (void)done;
     (void)rng;
     (void)heap;
+
+    return ret;
+}
+
+/* Compute R = P + s * Q, mapped to affine, where P is a public affine point.
+ * The scalar multiplication is constant time in s.
+ *
+ * @param  [in]   dp    Curve parameters.
+ * @param  [in]   P     Affine point on the curve (z = 1).
+ * @param  [in]   s     Scalar for Q, in [1, order - 1].
+ * @param  [in]   Q     Affine point on the curve.
+ * @param  [out]  R     Initialized point; receives the affine result.
+ * @param  [in]   heap  Heap hint for temporary allocations.
+ * @return  0 on success.
+ * @return  ECC_INF_E when the result is the point at infinity.
+ * @return  NOT_COMPILED_IN when no implementation is available for the
+ *          curve.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on ECC or math error.
+ */
+static int spake2p_add_mul(const ecc_set_type* dp, ecc_point* P, mp_int* s,
+    ecc_point* Q, ecc_point* R, void* heap)
+{
+    int ret = NOT_COMPILED_IN;
+    int done = 0;
+
+#ifdef WOLFSSL_HAVE_SP_ECC
+    done = spake2p_sp_mul_add(dp->id, s, Q, P, R, heap, &ret);
+#endif
+
+#if !defined(WOLFSSL_SP_MATH)
+    if (!done) {
+        ecc_point* Pm = NULL;
+        int infinity = 0;
+        WC_DECLARE_VAR(m, Spake2pCurveMath, 1, heap);
+
+        ret = 0;
+        WC_ALLOC_VAR_EX(m, Spake2pCurveMath, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+        if (ret == 0) {
+            ret = spake2p_math_load(dp, m);
+        }
+        if (ret == 0) {
+            Pm = wc_ecc_new_point_h(heap);
+            if (Pm == NULL) {
+                ret = MEMORY_E;
+            }
+        }
+        if (ret == 0) {
+            ret = spake2p_point_to_mont(P, Pm, m, heap);
+        }
+        if (ret == 0) {
+            ret = wc_ecc_mulmod_ex2(s, Q, R, &m->a, &m->prime, &m->order,
+                NULL, 0, heap);
+        }
+        if (ret == 0) {
+            ret = ecc_projective_add_point_safe(R, Pm, R, &m->a, &m->prime,
+                m->mp, &infinity);
+            if ((ret == 0) && infinity) {
+                ret = ECC_INF_E;
+            }
+        }
+        if (ret == 0) {
+            ret = ecc_map_ex(R, &m->prime, m->mp, 1);
+        }
+
+        if (Pm != NULL) {
+            wc_ecc_del_point_h(Pm, heap);
+        }
+        if (WC_VAR_OK(m)) {
+            spake2p_math_free(m);
+        }
+        WC_FREE_VAR_EX(m, heap, DYNAMIC_TYPE_ECC);
+        done = 1;
+    }
+#endif /* !WOLFSSL_SP_MATH */
+
+    if ((ret == 0) && mp_iszero(R->x) && mp_iszero(R->y)) {
+        ret = ECC_INF_E;
+    }
+    (void)done;
+    (void)heap;
+
+    return ret;
+}
+
+/* Compute R = k * P, mapped to affine in constant time. The scalar
+ * multiplication is constant time in k.
+ *
+ * @param  [in]   dp    Curve parameters.
+ * @param  [in]   k     Scalar, in [1, order - 1].
+ * @param  [in]   P     Affine point on the curve.
+ * @param  [out]  R     Initialized point; receives the affine result.
+ * @param  [in]   heap  Heap hint for temporary allocations.
+ * @return  0 on success.
+ * @return  ECC_INF_E when the result is the point at infinity.
+ * @return  NOT_COMPILED_IN when no implementation is available for the
+ *          curve.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on ECC or math error.
+ */
+static int spake2p_mul(const ecc_set_type* dp, mp_int* k, ecc_point* P,
+    ecc_point* R, void* heap)
+{
+    int ret = NOT_COMPILED_IN;
+    int done = 0;
+
+#ifdef WOLFSSL_HAVE_SP_ECC
+    done = spake2p_sp_mul(dp->id, k, P, R, heap, &ret);
+#endif
+
+#if !defined(WOLFSSL_SP_MATH)
+    if (!done) {
+        WC_DECLARE_VAR(m, Spake2pCurveMath, 1, heap);
+
+        ret = 0;
+        WC_ALLOC_VAR_EX(m, Spake2pCurveMath, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+        if (ret == 0) {
+            ret = spake2p_math_load(dp, m);
+        }
+        /* Leave projective, then map with the constant-time inversion. */
+        if (ret == 0) {
+            ret = wc_ecc_mulmod_ex2(k, P, R, &m->a, &m->prime, &m->order,
+                NULL, 0, heap);
+        }
+        if (ret == 0) {
+            ret = ecc_map_ex(R, &m->prime, m->mp, 1);
+        }
+
+        if (WC_VAR_OK(m)) {
+            spake2p_math_free(m);
+        }
+        WC_FREE_VAR_EX(m, heap, DYNAMIC_TYPE_ECC);
+        done = 1;
+    }
+#endif /* !WOLFSSL_SP_MATH */
+
+    if ((ret == 0) && mp_iszero(R->x) && mp_iszero(R->y)) {
+        ret = ECC_INF_E;
+    }
+    (void)done;
+    (void)heap;
+
+    return ret;
+}
+
+/* Encode an affine point as SEC1 uncompressed: 0x04 || X || Y.
+ *
+ * @param  [in]   pt   Affine point.
+ * @param  [in]   fs   Field size in bytes.
+ * @param  [out]  out  Buffer of at least 1 + 2 * fs bytes.
+ * @return  0 on success.
+ * @return  Negative value on math error.
+ */
+static int spake2p_encode_point(ecc_point* pt, word32 fs, byte* out)
+{
+    int ret;
+
+    out[0] = ECC_POINT_UNCOMP;
+    ret = mp_to_unsigned_bin_len(pt->x, out + 1, (int)fs);
+    if (ret == 0) {
+        ret = mp_to_unsigned_bin_len(pt->y, out + 1 + fs, (int)fs);
+    }
+
+    return ret;
+}
+
+/* Decode a SEC1 uncompressed point already validated by
+ * spake2p_check_point() (or produced by this library).
+ *
+ * @param  [in]   in  Encoded point, 1 + 2 * fs bytes.
+ * @param  [in]   fs  Field size in bytes.
+ * @param  [out]  pt  Initialized point; receives the affine point (z = 1).
+ * @return  0 on success.
+ * @return  Negative value on math error.
+ */
+static int spake2p_decode_point(const byte* in, word32 fs, ecc_point* pt)
+{
+    int ret;
+
+    ret = mp_read_unsigned_bin(pt->x, in + 1, fs);
+    if (ret == 0) {
+        ret = mp_read_unsigned_bin(pt->y, in + 1 + fs, fs);
+    }
+    if (ret == 0) {
+        ret = mp_set(pt->z, 1);
+    }
 
     return ret;
 }
@@ -1372,6 +1677,616 @@ int wc_Spake2pGenerateShare(wc_Spake2p* ctx, WC_RNG* rng, byte* share,
     WC_FREE_VAR_EX(k, heap, DYNAMIC_TYPE_ECC);
     WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
     (void)heap;
+
+    return ret;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Key schedule and confirmation                                             */
+/* ------------------------------------------------------------------------- */
+
+#define SPAKE2P_MAC_HMAC  0
+#define SPAKE2P_MAC_CMAC  1
+
+/* Length of the AES key and tag for the CMAC-AES-128 suites. */
+#define SPAKE2P_CMAC_SZ   16
+
+/* Hash, KDF and MAC parameters of a ciphersuite (RFC 9383, Section 4). */
+typedef struct Spake2pSuiteInfo {
+    enum wc_HashType hashType;  /* Hash, and HKDF/HMAC hash.             */
+    int              macType;   /* SPAKE2P_MAC_HMAC or SPAKE2P_MAC_CMAC. */
+    word32           hashSz;    /* K_main and K_shared length.           */
+    word32           keySz;     /* Length of each confirmation key.      */
+    word32           tagSz;     /* Confirmation MAC length.              */
+} Spake2pSuiteInfo;
+
+/* Get the hash, KDF and MAC parameters of a ciphersuite. The suite has been
+ * checked by wc_Spake2pInit().
+ *
+ * @param  [in]   suite  WC_SPAKE2P_<suite>.
+ * @param  [out]  info   Receives the parameters.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when suite is not a known ciphersuite.
+ */
+static int spake2p_suite_info(int suite, Spake2pSuiteInfo* info)
+{
+    int ret = 0;
+
+    switch (suite) {
+        case WC_SPAKE2P_P256_SHA256_HKDF_HMAC:
+        case WC_SPAKE2P_P384_SHA256_HKDF_HMAC:
+            info->hashType = WC_HASH_TYPE_SHA256;
+            info->macType = SPAKE2P_MAC_HMAC;
+            break;
+        case WC_SPAKE2P_P256_SHA512_HKDF_HMAC:
+        case WC_SPAKE2P_P384_SHA512_HKDF_HMAC:
+        case WC_SPAKE2P_P521_SHA512_HKDF_HMAC:
+            info->hashType = WC_HASH_TYPE_SHA512;
+            info->macType = SPAKE2P_MAC_HMAC;
+            break;
+        case WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128:
+            info->hashType = WC_HASH_TYPE_SHA256;
+            info->macType = SPAKE2P_MAC_CMAC;
+            break;
+        default:
+            ret = BAD_FUNC_ARG;
+            break;
+    }
+    if (ret == 0) {
+        ret = wc_HashGetDigestSize(info->hashType);
+        if (ret > 0) {
+            info->hashSz = (word32)ret;
+            ret = 0;
+        }
+        else if (ret == 0) {
+            ret = NOT_COMPILED_IN;
+        }
+    }
+    if (ret == 0) {
+        /* RFC 9383, Section 3.4: HMAC keys are the digest length; CMAC-AES
+         * keys are the AES key length. */
+        if (info->macType == SPAKE2P_MAC_HMAC) {
+            info->keySz = info->hashSz;
+            info->tagSz = info->hashSz;
+        }
+        else {
+            info->keySz = SPAKE2P_CMAC_SZ;
+            info->tagSz = SPAKE2P_CMAC_SZ;
+        }
+    }
+
+    return ret;
+}
+
+/* Compute the confirmation MAC of msg under key for the suite.
+ *
+ * @param  [in]   ctx    Context (heap hint and device id).
+ * @param  [in]   info   Suite parameters.
+ * @param  [in]   key    Confirmation key, info->keySz bytes.
+ * @param  [in]   msg    Message (a share).
+ * @param  [in]   msgSz  Length of msg in bytes.
+ * @param  [out]  out    Buffer of at least info->tagSz bytes.
+ * @return  0 on success.
+ * @return  NOT_COMPILED_IN when the MAC is not compiled in.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on MAC error.
+ */
+static int spake2p_mac(const wc_Spake2p* ctx, const Spake2pSuiteInfo* info,
+    const byte* key, const byte* msg, word32 msgSz, byte* out)
+{
+    int ret = NOT_COMPILED_IN;
+
+    if (info->macType == SPAKE2P_MAC_HMAC) {
+#ifndef NO_HMAC
+        WC_DECLARE_VAR(hmac, Hmac, 1, ctx->heap);
+
+        ret = 0;
+        WC_ALLOC_VAR_EX(hmac, Hmac, 1, ctx->heap, DYNAMIC_TYPE_HMAC,
+            ret = MEMORY_E);
+        if (ret == 0) {
+            ret = wc_HmacInit(hmac, ctx->heap, ctx->devId);
+            if (ret == 0) {
+                ret = wc_HmacSetKey(hmac, (int)info->hashType, key,
+                    info->keySz);
+                if (ret == 0) {
+                    ret = wc_HmacUpdate(hmac, msg, msgSz);
+                }
+                if (ret == 0) {
+                    ret = wc_HmacFinal(hmac, out);
+                }
+                wc_HmacFree(hmac);
+            }
+        }
+        WC_FREE_VAR_EX(hmac, ctx->heap, DYNAMIC_TYPE_HMAC);
+#endif
+    }
+    else {
+#ifdef WOLFSSL_CMAC
+        word32 outSz = SPAKE2P_CMAC_SZ;
+        WC_DECLARE_VAR(cmac, Cmac, 1, ctx->heap);
+
+        ret = 0;
+        WC_ALLOC_VAR_EX(cmac, Cmac, 1, ctx->heap, DYNAMIC_TYPE_CMAC,
+            ret = MEMORY_E);
+        if (ret == 0) {
+            ret = wc_AesCmacGenerate_ex(cmac, out, &outSz, msg, msgSz, key,
+                info->keySz, ctx->heap, ctx->devId);
+            ForceZero(cmac, sizeof(*cmac));
+        }
+        WC_FREE_VAR_EX(cmac, ctx->heap, DYNAMIC_TYPE_CMAC);
+#endif
+    }
+    (void)ctx;
+    (void)key;
+    (void)msg;
+    (void)msgSz;
+    (void)out;
+
+    return ret;
+}
+
+/* Add len(data) || data to the transcript hash, where len() is an eight-byte
+ * little-endian byte count (RFC 9383, Section 3).
+ *
+ * @param  [in, out]  hash    Hash in progress.
+ * @param  [in]       type    Hash type.
+ * @param  [in]       data    Data; may be NULL when sz is 0.
+ * @param  [in]       sz      Length of data in bytes.
+ * @return  0 on success.
+ * @return  Negative value on hash error.
+ */
+static int spake2p_tt_add(wc_HashAlg* hash, enum wc_HashType type,
+    const byte* data, word32 sz)
+{
+    int ret;
+    byte len[8];
+
+    /* word32 lengths: the upper four bytes are always zero. */
+    len[0] = (byte)(sz);
+    len[1] = (byte)(sz >> 8);
+    len[2] = (byte)(sz >> 16);
+    len[3] = (byte)(sz >> 24);
+    len[4] = 0;
+    len[5] = 0;
+    len[6] = 0;
+    len[7] = 0;
+
+    ret = wc_HashUpdate(hash, type, len, sizeof(len));
+    if ((ret == 0) && (sz > 0)) {
+        ret = wc_HashUpdate(hash, type, data, sz);
+    }
+
+    return ret;
+}
+
+/* Compute the transcript hash K_main = Hash(TT) (RFC 9383, Section 3.3):
+ *
+ *   TT = len(Context) || Context || len(idProver) || idProver
+ *     || len(idVerifier) || idVerifier || len(M) || M || len(N) || N
+ *     || len(shareP) || shareP || len(shareV) || shareV
+ *     || len(Z) || Z || len(V) || V || len(w0) || w0
+ *
+ * The context is always included, as a zero length when it is empty.
+ *
+ * @param  [in]   ctx     Context with transcript inputs and shares.
+ * @param  [in]   info    Suite parameters.
+ * @param  [in]   curveId ECC curve id.
+ * @param  [in]   fs      Field size in bytes.
+ * @param  [in]   Z       Encoded Z, 1 + 2 * fs bytes.
+ * @param  [in]   V       Encoded V, 1 + 2 * fs bytes.
+ * @param  [out]  kMain   Buffer of at least info->hashSz bytes.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on hash or math error.
+ */
+static int spake2p_transcript_hash(const wc_Spake2p* ctx,
+    const Spake2pSuiteInfo* info, int curveId, word32 fs, const byte* Z,
+    const byte* V, byte* kMain)
+{
+    int ret = 0;
+    int hashInit = 0;
+    word32 ptSz = 1 + 2 * fs;
+    const byte* shareP;
+    const byte* shareV;
+    byte mn[WC_SPAKE2P_MAX_POINT_SZ];
+    ecc_point* pt = NULL;
+    WC_DECLARE_VAR(hash, wc_HashAlg, 1, ctx->heap);
+
+    if (ctx->role == WC_SPAKE2P_PROVER) {
+        shareP = ctx->share;
+        shareV = ctx->peerShare;
+    }
+    else {
+        shareP = ctx->peerShare;
+        shareV = ctx->share;
+    }
+
+    WC_ALLOC_VAR_EX(hash, wc_HashAlg, 1, ctx->heap, DYNAMIC_TYPE_HASHES,
+        ret = MEMORY_E);
+    if (ret == 0) {
+        pt = wc_ecc_new_point_h(ctx->heap);
+        if (pt == NULL) {
+            ret = MEMORY_E;
+        }
+    }
+    if (ret == 0) {
+        ret = wc_HashInit_ex(hash, info->hashType, ctx->heap, ctx->devId);
+        if (ret == 0) {
+            hashInit = 1;
+        }
+    }
+
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, ctx->context,
+            ctx->contextSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, ctx->idProver,
+            ctx->idProverSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, ctx->idVerifier,
+            ctx->idVerifierSz);
+    }
+    /* M then N, uncompressed. */
+    if (ret == 0) {
+        ret = spake2p_load_fixed_point(curveId, 0, pt);
+    }
+    if (ret == 0) {
+        ret = spake2p_encode_point(pt, fs, mn);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, mn, ptSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_load_fixed_point(curveId, 1, pt);
+    }
+    if (ret == 0) {
+        ret = spake2p_encode_point(pt, fs, mn);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, mn, ptSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, shareP, ptSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, shareV, ptSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, Z, ptSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, V, ptSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_tt_add(hash, info->hashType, ctx->w0, ctx->w0Sz);
+    }
+    if (ret == 0) {
+        ret = wc_HashFinal(hash, info->hashType, kMain);
+    }
+
+    if (hashInit) {
+        /* The hash state has absorbed Z, V and w0. */
+        (void)wc_HashFree(hash, info->hashType);
+        ForceZero(hash, sizeof(*hash));
+    }
+    WC_FREE_VAR_EX(hash, ctx->heap, DYNAMIC_TYPE_HASHES);
+    if (pt != NULL) {
+        wc_ecc_del_point_h(pt, ctx->heap);
+    }
+
+    return ret;
+}
+
+/* Derive the confirmation keys and K_shared from K_main (RFC 9383,
+ * Section 3.4), storing them in the context:
+ *
+ *   K_confirmP || K_confirmV = KDF(nil, K_main, "ConfirmationKeys")
+ *   K_shared = KDF(nil, K_main, "SharedKey")
+ *
+ * @param  [in, out]  ctx    Context.
+ * @param  [in]       info   Suite parameters.
+ * @param  [in]       kMain  K_main, info->hashSz bytes.
+ * @return  0 on success.
+ * @return  Negative value on HKDF error.
+ */
+static int spake2p_key_schedule(wc_Spake2p* ctx, const Spake2pSuiteInfo* info,
+    const byte* kMain)
+{
+    static const byte confLabel[] = "ConfirmationKeys";
+    static const byte sharedLabel[] = "SharedKey";
+    int ret;
+    byte keys[2 * WC_SPAKE2P_MAX_CONFIRM_KEY_SZ];
+
+    ret = wc_HKDF_ex((int)info->hashType, kMain, info->hashSz, NULL, 0,
+        confLabel, (word32)sizeof(confLabel) - 1, keys, 2 * info->keySz,
+        ctx->heap, ctx->devId);
+    if (ret == 0) {
+        XMEMCPY(ctx->kConfirmP, keys, info->keySz);
+        XMEMCPY(ctx->kConfirmV, keys + info->keySz, info->keySz);
+        ctx->kConfirmSz = info->keySz;
+        ret = wc_HKDF_ex((int)info->hashType, kMain, info->hashSz, NULL, 0,
+            sharedLabel, (word32)sizeof(sharedLabel) - 1, ctx->kShared,
+            info->hashSz, ctx->heap, ctx->devId);
+    }
+    if (ret == 0) {
+        ctx->kSharedSz = info->hashSz;
+    }
+    ForceZero(keys, sizeof(keys));
+
+    return ret;
+}
+
+/* Compute the shared points Z and V (RFC 9383, Section 3.3). The cofactor h
+ * is 1 for the supported curves.
+ *
+ *   Prover:   T = shareV - w0 * N,  Z = x * T,  V = w1 * T
+ *   Verifier: T = shareP - w0 * M,  Z = y * T,  V = y * L
+ *
+ * T is computed as peerShare + (order - w0) * N (or M).
+ *
+ * @param  [in]   ctx      Context with secrets, ephemeral and peer share.
+ * @param  [in]   dp       Curve parameters.
+ * @param  [in]   fs       Field size in bytes.
+ * @param  [out]  Zenc     Receives Z, 1 + 2 * fs bytes.
+ * @param  [out]  Venc     Receives V, 1 + 2 * fs bytes.
+ * @return  0 on success.
+ * @return  ECC_INF_E when T, Z or V is the point at infinity.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on ECC or math error.
+ */
+static int spake2p_compute_zv(const wc_Spake2p* ctx, const ecc_set_type* dp,
+    word32 fs, byte* Zenc, byte* Venc)
+{
+    int ret = 0;
+    int initDone = 0;
+    word32 orderSz = 0;
+    void* heap = ctx->heap;
+    ecc_point* peer = NULL;
+    ecc_point* Q = NULL;
+    ecc_point* T = NULL;
+    ecc_point* R = NULL;
+    WC_DECLARE_VAR(order, mp_int, 1, heap);
+    WC_DECLARE_VAR(k, mp_int, 1, heap);
+    WC_DECLARE_VAR(nw0, mp_int, 1, heap);
+    WC_DECLARE_VAR(w1, mp_int, 1, heap);
+
+    WC_ALLOC_VAR_EX(order, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+        ret = MEMORY_E);
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(k, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(nw0, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        WC_ALLOC_VAR_EX(w1, mp_int, 1, heap, DYNAMIC_TYPE_ECC,
+            ret = MEMORY_E);
+    }
+    if (ret == 0) {
+        ret = mp_init_multi(order, k, nw0, w1, NULL, NULL);
+        if (ret == 0) {
+            initDone = 1;
+        }
+    }
+    if (ret == 0) {
+        peer = wc_ecc_new_point_h(heap);
+        Q = wc_ecc_new_point_h(heap);
+        T = wc_ecc_new_point_h(heap);
+        R = wc_ecc_new_point_h(heap);
+        if ((peer == NULL) || (Q == NULL) || (T == NULL) || (R == NULL)) {
+            ret = MEMORY_E;
+        }
+    }
+
+    if (ret == 0) {
+        ret = spake2p_load_order(ctx->suite, order, &orderSz);
+    }
+    /* nw0 = order - w0, so nw0 * Q = -(w0 * Q). w0 is in [1, order - 1]. */
+    if (ret == 0) {
+        ret = mp_read_unsigned_bin(nw0, ctx->w0, ctx->w0Sz);
+    }
+    if (ret == 0) {
+        ret = mp_sub(order, nw0, nw0);
+    }
+    if (ret == 0) {
+        ret = mp_read_unsigned_bin(k, ctx->eph, ctx->ephSz);
+    }
+    if (ret == 0) {
+        ret = spake2p_decode_point(ctx->peerShare, fs, peer);
+    }
+    /* Prover removes w0 * N from shareV; Verifier removes w0 * M from
+     * shareP. */
+    if (ret == 0) {
+        ret = spake2p_load_fixed_point(dp->id,
+            ctx->role == WC_SPAKE2P_PROVER, Q);
+    }
+    if (ret == 0) {
+        ret = spake2p_add_mul(dp, peer, nw0, Q, T, heap);
+    }
+
+    /* Z = eph * T */
+    if (ret == 0) {
+        ret = spake2p_mul(dp, k, T, R, heap);
+    }
+    if (ret == 0) {
+        ret = spake2p_encode_point(R, fs, Zenc);
+    }
+
+    /* V = w1 * T (Prover) or y * L (Verifier). */
+    if (ret == 0) {
+        if (ctx->role == WC_SPAKE2P_PROVER) {
+            ret = mp_read_unsigned_bin(w1, ctx->sec.w1, ctx->secSz);
+            if (ret == 0) {
+                ret = spake2p_mul(dp, w1, T, R, heap);
+            }
+        }
+        else {
+            ret = spake2p_decode_point(ctx->sec.L, fs, Q);
+            if (ret == 0) {
+                ret = spake2p_mul(dp, k, Q, R, heap);
+            }
+        }
+    }
+    if (ret == 0) {
+        ret = spake2p_encode_point(R, fs, Venc);
+    }
+
+    /* T reveals w0 * N (or M) given the public share, and R held Z and V. */
+    if (T != NULL) {
+        wc_ecc_forcezero_point(T);
+        wc_ecc_del_point_h(T, heap);
+    }
+    if (R != NULL) {
+        wc_ecc_forcezero_point(R);
+        wc_ecc_del_point_h(R, heap);
+    }
+    if (Q != NULL) {
+        wc_ecc_del_point_h(Q, heap);
+    }
+    if (peer != NULL) {
+        wc_ecc_del_point_h(peer, heap);
+    }
+    if (initDone) {
+        mp_forcezero(w1);
+        mp_forcezero(nw0);
+        mp_forcezero(k);
+        mp_clear(order);
+    }
+    WC_FREE_VAR_EX(w1, heap, DYNAMIC_TYPE_ECC);
+    WC_FREE_VAR_EX(nw0, heap, DYNAMIC_TYPE_ECC);
+    WC_FREE_VAR_EX(k, heap, DYNAMIC_TYPE_ECC);
+    WC_FREE_VAR_EX(order, heap, DYNAMIC_TYPE_ECC);
+    (void)heap;
+
+    return ret;
+}
+
+/* Process the peer's share and produce this side's confirmation MAC
+ * (RFC 9383, Sections 3.3 and 3.4).
+ *
+ * Validates the peer share, computes Z and V, hashes the transcript to
+ * K_main, derives K_confirmP, K_confirmV and K_shared, and outputs
+ *   Prover:   confirmP = MAC(K_confirmP, shareV)
+ *   Verifier: confirmV = MAC(K_confirmV, shareP)
+ *
+ * Argument, state and buffer-size errors leave the context unchanged. Any
+ * later error puts it in the failed state: every further call except
+ * wc_Spake2pFree() returns BAD_STATE_E.
+ *
+ * @param  [in, out]  ctx          Context after wc_Spake2pGenerateShare().
+ * @param  [in]       peerShare    Peer's share, SEC1 uncompressed.
+ * @param  [in]       peerShareSz  Length of peerShare in bytes.
+ * @param  [out]      confirm      Buffer that receives this side's MAC.
+ * @param  [in, out]  confirmSz    On in, size of confirm. On out, bytes
+ *                                 written.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when a pointer is NULL.
+ * @return  BAD_STATE_E when no share has been generated, or the peer share
+ *          was already processed.
+ * @return  BUFFER_E when *confirmSz is too small.
+ * @return  IS_POINT_E when the peer share is malformed or not on the curve.
+ * @return  ECC_INF_E when the peer share or a computed point is the point at
+ *          infinity.
+ * @return  NOT_COMPILED_IN when ECC key import is not compiled in.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ * @return  Other negative value on ECC, hash or MAC error.
+ */
+int wc_Spake2pProcessPeerShare(wc_Spake2p* ctx, const byte* peerShare,
+    word32 peerShareSz, byte* confirm, word32* confirmSz)
+{
+    int ret;
+    int curveId = 0;
+    int idx;
+    word32 fs = 0;
+    const ecc_set_type* dp = NULL;
+    Spake2pSuiteInfo info;
+    byte Z[WC_SPAKE2P_MAX_POINT_SZ];
+    byte V[WC_SPAKE2P_MAX_POINT_SZ];
+    byte kMain[WC_SPAKE2P_MAX_HASH_SZ];
+
+    if ((ctx == NULL) || (peerShare == NULL) || (confirm == NULL) ||
+            (confirmSz == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    if (ctx->state != WC_SPAKE2P_STATE_SHARE) {
+        return BAD_STATE_E;
+    }
+    ret = spake2p_suite_info(ctx->suite, &info);
+    if ((ret == 0) && (*confirmSz < info.tagSz)) {
+        ret = BUFFER_E;
+    }
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* From here on, any failure is fatal to the context. */
+    ret = spake2p_suite_curve(ctx->suite, &curveId);
+    if (ret == 0) {
+        idx = wc_ecc_get_curve_idx(curveId);
+        if (idx >= 0) {
+            dp = wc_ecc_get_curve_params(idx);
+        }
+        if (dp == NULL) {
+            ret = NOT_COMPILED_IN;
+        }
+    }
+    /* RFC 9383, Section 6: abort unless the peer share is in the
+     * prime-order group. With cofactor 1 that is: on the curve and not the
+     * identity. */
+    if (ret == 0) {
+        fs = (word32)dp->size;
+#ifdef HAVE_ECC_KEY_IMPORT
+        ret = spake2p_check_point(ctx->suite, peerShare, peerShareSz,
+            ctx->heap);
+#else
+        ret = NOT_COMPILED_IN;
+#endif
+    }
+    if (ret == 0) {
+        XMEMCPY(ctx->peerShare, peerShare, peerShareSz);
+        ctx->peerShareSz = peerShareSz;
+        ret = spake2p_compute_zv(ctx, dp, fs, Z, V);
+    }
+    if (ret == 0) {
+        ret = spake2p_transcript_hash(ctx, &info, curveId, fs, Z, V, kMain);
+    }
+    if (ret == 0) {
+        ret = spake2p_key_schedule(ctx, &info, kMain);
+    }
+    if (ret == 0) {
+        /* This side's MAC is over the peer's share. */
+        ret = spake2p_mac(ctx, &info,
+            (ctx->role == WC_SPAKE2P_PROVER) ? ctx->kConfirmP :
+                                               ctx->kConfirmV,
+            ctx->peerShare, ctx->peerShareSz, confirm);
+    }
+
+    if (ret == 0) {
+        *confirmSz = info.tagSz;
+        ctx->state = WC_SPAKE2P_STATE_KEYS;
+    }
+    else {
+        ForceZero(ctx->kConfirmP, sizeof(ctx->kConfirmP));
+        ForceZero(ctx->kConfirmV, sizeof(ctx->kConfirmV));
+        ForceZero(ctx->kShared, sizeof(ctx->kShared));
+        ctx->kConfirmSz = 0;
+        ctx->kSharedSz = 0;
+        ctx->state = WC_SPAKE2P_STATE_FAILED;
+    }
+    /* The ephemeral scalar is not needed once Z and V are computed; a leaked
+     * ephemeral reveals w0 from the share. */
+    ForceZero(ctx->eph, sizeof(ctx->eph));
+    ctx->ephSz = 0;
+
+    /* K_main must be discarded (RFC 9383, Section 3.4); Z and V are
+     * secret. */
+    ForceZero(kMain, sizeof(kMain));
+    ForceZero(Z, sizeof(Z));
+    ForceZero(V, sizeof(V));
 
     return ret;
 }
