@@ -396,6 +396,9 @@ function(generate_build_flags)
     if(WOLFSSL_SRP OR WOLFSSL_USER_SETTINGS)
         set(BUILD_SRP "yes" PARENT_SCOPE)
     endif()
+    if(WOLFSSL_SPAKE2P OR WOLFSSL_USER_SETTINGS)
+        set(BUILD_SPAKE2P "yes" PARENT_SCOPE)
+    endif()
     if(WOLFSSL_RNG_BANK OR WOLFSSL_USER_SETTINGS)
         set(BUILD_RNG_BANK "yes" PARENT_SCOPE)
     endif()
@@ -1412,6 +1415,10 @@ function(generate_lib_src_list LIB_SOURCES)
 
         if(BUILD_SRP)
             list(APPEND LIB_SOURCES wolfcrypt/src/srp.c)
+        endif()
+
+        if(BUILD_SPAKE2P)
+            list(APPEND LIB_SOURCES wolfcrypt/src/spake2p.c)
         endif()
 
         # WOLFSSL_RNG_BANK defined WC_RNG_BANK_SUPPORT without ever adding

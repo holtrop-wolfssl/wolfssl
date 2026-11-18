@@ -578,6 +578,7 @@ treat it as a prompt to connect a real entropy source on your hardware.
 | --- | --- | --- |
 | `HAVE_HPKE` | Hybrid Public Key Encryption (RFC 9180). Pulls in HKDF, and needs a KEM — ECC or Curve25519 | `--enable-hpke` |
 | `WOLFCRYPT_HAVE_SRP` | SRP password-authenticated key exchange (RFC 5054) | `--enable-srp` |
+| `WOLFSSL_HAVE_SPAKE2P` | SPAKE2+ augmented password-authenticated key exchange (RFC 9383). Needs ECC and HKDF | `--enable-spake2p` |
 | `HAVE_PKCS7` | PKCS#7 / CMS signing and enveloping, used for firmware signing and S/MIME | `--enable-pkcs7` |
 
 HPKE is what wolfSSL's Encrypted Client Hello support is built on, so enable it

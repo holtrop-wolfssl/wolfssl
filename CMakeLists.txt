@@ -4081,6 +4081,21 @@ if(WOLFSSL_SRP)
         )
 endif()
 
+add_option("WOLFSSL_SPAKE2P"
+    "Enable SPAKE2+ (RFC 9383) PAKE (default: disabled)"
+    "no" "yes;no")
+if(WOLFSSL_SPAKE2P)
+    if(NOT WOLFSSL_ECC)
+        message(FATAL_ERROR "Cannot enable SPAKE2+ (WOLFSSL_SPAKE2P) without enabling ECC (WOLFSSL_ECC).")
+    endif()
+    if(NOT WOLFSSL_HKDF)
+        message(FATAL_ERROR "Cannot enable SPAKE2+ (WOLFSSL_SPAKE2P) without enabling HKDF (WOLFSSL_HKDF).")
+    endif()
+    list(APPEND WOLFSSL_DEFINITIONS
+        "-DWOLFSSL_HAVE_SPAKE2P"
+        )
+endif()
+
 add_option("WOLFSSL_MOSQUITTO"
     "Enable Mosquitto support (default: disabled)"
     "no" "yes;no")

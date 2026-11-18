@@ -10411,6 +10411,27 @@ then
 fi
 
 
+# SPAKE2+ (RFC 9383)
+AC_ARG_ENABLE([spake2p],
+    [AS_HELP_STRING([--enable-spake2p],[Enable SPAKE2+ (RFC 9383) PAKE (default: disabled)])],
+    [ ENABLED_SPAKE2P=$enableval ],
+    [ ENABLED_SPAKE2P=no ]
+    )
+
+if test "x$ENABLED_SPAKE2P" = "xyes"
+then
+    if test "x$ENABLED_ECC" = "xno"
+    then
+        AC_MSG_ERROR([--enable-spake2p requires ECC (--enable-ecc).])
+    fi
+    if test "$ENABLED_HKDF" != "yes"
+    then
+        AC_MSG_ERROR([--enable-spake2p requires HKDF (--enable-hkdf).])
+    fi
+    AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_HAVE_SPAKE2P"
+fi
+
+
 # Indefinite length encoded BER message support
 AC_ARG_ENABLE([indef],
     [AS_HELP_STRING([--enable-indef],[Enable parsing of indefinite length encoded msgs (default: disabled)])],
@@ -14836,6 +14857,7 @@ AM_CONDITIONAL([BUILD_OCSP_STAPLING_V2],[test "x$ENABLED_CERTIFICATE_STATUS_REQU
 AM_CONDITIONAL([BUILD_CRL],[test "x$ENABLED_CRL" != "xno" || test "x$ENABLED_USERSETTINGS" = "xyes"])
 AM_CONDITIONAL([BUILD_CRL_MONITOR],[test "x$ENABLED_CRL_MONITOR" = "xyes"])
 AM_CONDITIONAL([BUILD_SRP],[test "x$ENABLED_SRP" = "xyes" || test "x$ENABLED_USERSETTINGS" = "xyes"])
+AM_CONDITIONAL([BUILD_SPAKE2P],[test "x$ENABLED_SPAKE2P" = "xyes" || test "x$ENABLED_USERSETTINGS" = "xyes"])
 AM_CONDITIONAL([USE_VALGRIND],[test "x$ENABLED_VALGRIND" = "xyes"])
 AM_CONDITIONAL([BUILD_MD4],[test "x$ENABLED_MD4" = "xyes" || test "x$ENABLED_USERSETTINGS" = "xyes"])
 AM_CONDITIONAL([BUILD_PWDBASED],[test "x$ENABLED_PWDBASED" = "xyes" || test "x$ENABLED_USERSETTINGS" = "xyes"])
@@ -15484,6 +15506,7 @@ echo "   * wolfTPM:                    $ENABLED_WOLFTPM"
 echo "   * wolfCLU:                    $ENABLED_WOLFCLU"
 echo "   * wolfSCEP:                   $ENABLED_WOLFSCEP"
 echo "   * Secure Remote Password:     $ENABLED_SRP"
+echo "   * SPAKE2+:                    $ENABLED_SPAKE2P"
 echo "   * Small Stack:                $ENABLED_SMALL_STACK"
 echo "   * Linux Kernel Module:        $ENABLED_LINUXKM"
 

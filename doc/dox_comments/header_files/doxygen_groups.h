@@ -324,6 +324,7 @@
     \defgroup SHA Algorithms - SHA 128/224/256/384/512
     \defgroup SHE Algorithms - SHE
     \defgroup SipHash Algorithm - SipHash
+    \defgroup SPAKE2P Algorithm - SPAKE2+
     \defgroup SrtpKdf Algorithm - SRTP KDF
     \defgroup SRP Algorithms - SRP
 
