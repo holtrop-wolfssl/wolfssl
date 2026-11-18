@@ -63,6 +63,10 @@
 #ifndef HAVE_HKDF
     #error "SPAKE2+ requires HKDF (HAVE_HKDF)"
 #endif
+#ifdef NO_HMAC
+    /* HKDF is built on HMAC, so even the CMAC suites need it. */
+    #error "SPAKE2+ requires HMAC (HKDF is built on it)"
+#endif
 #ifdef NO_SHA256
     #error "SPAKE2+ requires SHA-256"
 #endif

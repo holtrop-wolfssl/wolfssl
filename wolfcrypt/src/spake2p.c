@@ -117,16 +117,14 @@ static int spake2p_suite_supported(int suite)
     }
     if (ret == 0) {
         switch (suite) {
+            /* HMAC is always present: spake2p.h requires it for HKDF. */
             case WC_SPAKE2P_P256_SHA256_HKDF_HMAC:
             case WC_SPAKE2P_P384_SHA256_HKDF_HMAC:
-        #ifdef NO_HMAC
-                ret = NOT_COMPILED_IN;
-        #endif
                 break;
             case WC_SPAKE2P_P256_SHA512_HKDF_HMAC:
             case WC_SPAKE2P_P384_SHA512_HKDF_HMAC:
             case WC_SPAKE2P_P521_SHA512_HKDF_HMAC:
-        #if defined(NO_HMAC) || !defined(WOLFSSL_SHA512)
+        #ifndef WOLFSSL_SHA512
                 ret = NOT_COMPILED_IN;
         #endif
                 break;
@@ -1777,7 +1775,6 @@ static int spake2p_mac(const wc_Spake2p* ctx, const Spake2pSuiteInfo* info,
     int ret = NOT_COMPILED_IN;
 
     if (info->macType == SPAKE2P_MAC_HMAC) {
-#ifndef NO_HMAC
         WC_DECLARE_VAR(hmac, Hmac, 1, ctx->heap);
 
         ret = 0;
@@ -1798,7 +1795,6 @@ static int spake2p_mac(const wc_Spake2p* ctx, const Spake2pSuiteInfo* info,
             }
         }
         WC_FREE_VAR_EX(hmac, ctx->heap, DYNAMIC_TYPE_HMAC);
-#endif
     }
     else {
 #ifdef WOLFSSL_CMAC
