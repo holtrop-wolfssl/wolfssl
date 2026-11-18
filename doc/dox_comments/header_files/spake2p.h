@@ -839,7 +839,8 @@ int wc_Spake2pDelete(wc_Spake2p* ctx, wc_Spake2p** ctx_p);
     downgrade and cross-protocol attacks. Must be called before
     wc_Spake2pGenerateShare(). The data is copied, so the caller's buffer may
     be reused or deallocated immediately. Calling it again replaces the
-    previous value.
+    previous value; if it fails, the previous value is left unchanged and
+    the context remains usable.
 
     \return 0 on success.
     \return BAD_FUNC_ARG if ctx is NULL, or context is NULL while contextSz
@@ -881,7 +882,8 @@ int wc_Spake2pSetContext(wc_Spake2p* ctx, const byte* context,
     unless the identities are already implicit in the application; leaving
     them empty otherwise risks unknown key-share attacks. Must be called
     before wc_Spake2pGenerateShare(). The data is copied. Calling it again
-    replaces the previous values.
+    replaces both previous values; if it fails, neither previous value is
+    changed and the context remains usable.
 
     \return 0 on success.
     \return BAD_FUNC_ARG if ctx is NULL, or an identity pointer is NULL

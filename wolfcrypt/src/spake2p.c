@@ -22,7 +22,8 @@
 /* SPAKE2+ (RFC 9383) augmented PAKE. API: wolfssl/wolfcrypt/spake2p.h
  *
  * Implemented so far: wc_Spake2pDeriveW0W1(), wc_Spake2pComputeL(),
- * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete().
+ * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete(),
+ * wc_Spake2pSetContext(), wc_Spake2pSetIdentities().
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -464,6 +465,50 @@ int wc_Spake2pComputeL(int suite, const byte* w1, word32 w1Sz,
 }
 
 /* ------------------------------------------------------------------------- */
+/* Owned buffers                                                             */
+/* ------------------------------------------------------------------------- */
+
+/* Make an owned copy of a byte string. An empty string is stored as NULL.
+ *
+ * @param  [in]   heap   Heap hint.
+ * @param  [in]   src    Data to copy; may be NULL when srcSz is 0.
+ * @param  [in]   srcSz  Length of src in bytes.
+ * @param  [out]  out    Receives the copy, or NULL when srcSz is 0.
+ * @return  0 on success.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+static int spake2p_dup(void* heap, const byte* src, word32 srcSz, byte** out)
+{
+    *out = NULL;
+    if (srcSz == 0) {
+        return 0;
+    }
+    *out = (byte*)XMALLOC(srcSz, heap, DYNAMIC_TYPE_SPAKE2P);
+    if (*out == NULL) {
+        return MEMORY_E;
+    }
+    XMEMCPY(*out, src, srcSz);
+    (void)heap;
+
+    return 0;
+}
+
+/* Zeroize and free an owned copy made by spake2p_dup(). NULL is a no-op.
+ *
+ * @param  [in]  heap  Heap hint used for the allocation.
+ * @param  [in]  buf   Buffer to free, or NULL.
+ * @param  [in]  sz    Length of buf in bytes.
+ */
+static void spake2p_free_buf(void* heap, byte* buf, word32 sz)
+{
+    if (buf != NULL) {
+        ForceZero(buf, sz);
+        XFREE(buf, heap, DYNAMIC_TYPE_SPAKE2P);
+    }
+    (void)heap;
+}
+
+/* ------------------------------------------------------------------------- */
 /* Lifecycle                                                                 */
 /* ------------------------------------------------------------------------- */
 
@@ -521,29 +566,16 @@ int wc_Spake2pInit(wc_Spake2p* ctx, int suite, int role, void* heap, int devId)
  */
 void wc_Spake2pFree(wc_Spake2p* ctx)
 {
-    void* heap;
-
     if (ctx == NULL) {
         return;
     }
-    heap = ctx->heap;
-    (void)heap;
 
     /* Owned copies made by wc_Spake2pSetContext() and
      * wc_Spake2pSetIdentities(). Not secret, but zeroed with everything
      * else. */
-    if (ctx->context != NULL) {
-        ForceZero(ctx->context, ctx->contextSz);
-        XFREE(ctx->context, heap, DYNAMIC_TYPE_SPAKE2P);
-    }
-    if (ctx->idProver != NULL) {
-        ForceZero(ctx->idProver, ctx->idProverSz);
-        XFREE(ctx->idProver, heap, DYNAMIC_TYPE_SPAKE2P);
-    }
-    if (ctx->idVerifier != NULL) {
-        ForceZero(ctx->idVerifier, ctx->idVerifierSz);
-        XFREE(ctx->idVerifier, heap, DYNAMIC_TYPE_SPAKE2P);
-    }
+    spake2p_free_buf(ctx->heap, ctx->context, ctx->contextSz);
+    spake2p_free_buf(ctx->heap, ctx->idProver, ctx->idProverSz);
+    spake2p_free_buf(ctx->heap, ctx->idVerifier, ctx->idVerifierSz);
 
     /* Zeroizes all secrets and leaves every pointer NULL, so a second call
      * is a no-op. */
@@ -615,5 +647,116 @@ int wc_Spake2pDelete(wc_Spake2p* ctx, wc_Spake2p** ctx_p)
     return 0;
 }
 #endif /* !WC_NO_CONSTRUCTORS */
+
+/* ------------------------------------------------------------------------- */
+/* Transcript inputs                                                         */
+/* ------------------------------------------------------------------------- */
+
+/* Check that the transcript inputs can still be changed: only before this
+ * side's share has been generated.
+ *
+ * @param  [in]  ctx  Context.
+ * @return  1 when the context and identities may be set, 0 otherwise.
+ */
+static int spake2p_transcript_settable(const wc_Spake2p* ctx)
+{
+    return (ctx->state == WC_SPAKE2P_STATE_INIT) ||
+           (ctx->state == WC_SPAKE2P_STATE_SECRETS);
+}
+
+/* Set the application context string bound into the transcript.
+ *
+ * The data is copied. Calling again replaces the previous value; on error
+ * the previous value is left unchanged.
+ *
+ * @param  [in, out]  ctx        Initialized context.
+ * @param  [in]       context    Context bytes; may be NULL when contextSz
+ *                               is 0.
+ * @param  [in]       contextSz  Length of context in bytes.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when ctx is NULL, or context is NULL while contextSz
+ *          is not 0.
+ * @return  BAD_STATE_E when called after wc_Spake2pGenerateShare().
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+int wc_Spake2pSetContext(wc_Spake2p* ctx, const byte* context,
+    word32 contextSz)
+{
+    int ret;
+    byte* copy = NULL;
+
+    if ((ctx == NULL) || ((context == NULL) && (contextSz != 0))) {
+        return BAD_FUNC_ARG;
+    }
+    if (!spake2p_transcript_settable(ctx)) {
+        return BAD_STATE_E;
+    }
+
+    /* Copy before freeing the old value: keeps it on failure, and is safe if
+     * context points into the current copy. */
+    ret = spake2p_dup(ctx->heap, context, contextSz, &copy);
+    if (ret == 0) {
+        spake2p_free_buf(ctx->heap, ctx->context, ctx->contextSz);
+        ctx->context = copy;
+        ctx->contextSz = contextSz;
+    }
+
+    return ret;
+}
+
+/* Set the Prover and Verifier identities bound into the transcript.
+ *
+ * Both are copied. Calling again replaces both previous values; on error
+ * neither previous value is changed.
+ *
+ * @param  [in, out]  ctx           Initialized context.
+ * @param  [in]       idProver      Prover identity; may be NULL when
+ *                                  idProverSz is 0.
+ * @param  [in]       idProverSz    Length of idProver in bytes.
+ * @param  [in]       idVerifier    Verifier identity; may be NULL when
+ *                                  idVerifierSz is 0.
+ * @param  [in]       idVerifierSz  Length of idVerifier in bytes.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when ctx is NULL, or an identity is NULL while its
+ *          size is not 0.
+ * @return  BAD_STATE_E when called after wc_Spake2pGenerateShare().
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+int wc_Spake2pSetIdentities(wc_Spake2p* ctx,
+    const byte* idProver, word32 idProverSz,
+    const byte* idVerifier, word32 idVerifierSz)
+{
+    int ret;
+    byte* copyP = NULL;
+    byte* copyV = NULL;
+
+    if ((ctx == NULL) || ((idProver == NULL) && (idProverSz != 0)) ||
+            ((idVerifier == NULL) && (idVerifierSz != 0))) {
+        return BAD_FUNC_ARG;
+    }
+    if (!spake2p_transcript_settable(ctx)) {
+        return BAD_STATE_E;
+    }
+
+    /* Make both copies before replacing either value, so a failure leaves
+     * the identities exactly as they were. */
+    ret = spake2p_dup(ctx->heap, idProver, idProverSz, &copyP);
+    if (ret == 0) {
+        ret = spake2p_dup(ctx->heap, idVerifier, idVerifierSz, &copyV);
+        if (ret != 0) {
+            spake2p_free_buf(ctx->heap, copyP, idProverSz);
+        }
+    }
+    if (ret == 0) {
+        spake2p_free_buf(ctx->heap, ctx->idProver, ctx->idProverSz);
+        spake2p_free_buf(ctx->heap, ctx->idVerifier, ctx->idVerifierSz);
+        ctx->idProver = copyP;
+        ctx->idProverSz = idProverSz;
+        ctx->idVerifier = copyV;
+        ctx->idVerifierSz = idVerifierSz;
+    }
+
+    return ret;
+}
 
 #endif /* WOLFSSL_HAVE_SPAKE2P */
