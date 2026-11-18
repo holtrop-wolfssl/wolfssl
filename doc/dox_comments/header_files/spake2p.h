@@ -683,6 +683,11 @@ int wc_Spake2pComputeL(int suite, const byte* w1, word32 w1Sz,
     exactly one exchange. To run another, call wc_Spake2pFree() and then
     wc_Spake2pInit() again.
 
+    The context is zeroed before the arguments are checked, so
+    wc_Spake2pFree() may be called on it even if this function fails.
+    Calling wc_Spake2pInit() on a context that is in use without first
+    calling wc_Spake2pFree() leaks its allocations.
+
     \return 0 on success.
     \return BAD_FUNC_ARG if ctx is NULL or role is not WC_SPAKE2P_PROVER or
     WC_SPAKE2P_VERIFIER, or the suite value is unknown.

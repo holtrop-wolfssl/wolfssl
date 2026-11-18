@@ -21,7 +21,8 @@
 
 /* SPAKE2+ (RFC 9383) augmented PAKE. API: wolfssl/wolfcrypt/spake2p.h
  *
- * Implemented so far: wc_Spake2pDeriveW0W1(), wc_Spake2pComputeL().
+ * Implemented so far: wc_Spake2pDeriveW0W1(), wc_Spake2pComputeL(),
+ * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete().
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -70,6 +71,54 @@ static int spake2p_suite_curve(int suite, int* curveId)
         default:
             ret = BAD_FUNC_ARG;
             break;
+    }
+
+    return ret;
+}
+
+/* Check that a ciphersuite is known and that its curve, hash and MAC are all
+ * compiled in.
+ *
+ * @param  [in]  suite  WC_SPAKE2P_<suite>.
+ * @return  0 when the suite can be used.
+ * @return  BAD_FUNC_ARG when suite is not a known ciphersuite.
+ * @return  NOT_COMPILED_IN when the suite's curve, hash or MAC is not
+ *          compiled in.
+ */
+static int spake2p_suite_supported(int suite)
+{
+    int ret;
+    int curveId = 0;
+
+    ret = spake2p_suite_curve(suite, &curveId);
+    if ((ret == 0) && (wc_ecc_get_curve_idx(curveId) < 0)) {
+        ret = NOT_COMPILED_IN;
+    }
+    if (ret == 0) {
+        switch (suite) {
+            case WC_SPAKE2P_P256_SHA256_HKDF_HMAC:
+            case WC_SPAKE2P_P384_SHA256_HKDF_HMAC:
+        #ifdef NO_HMAC
+                ret = NOT_COMPILED_IN;
+        #endif
+                break;
+            case WC_SPAKE2P_P256_SHA512_HKDF_HMAC:
+            case WC_SPAKE2P_P384_SHA512_HKDF_HMAC:
+            case WC_SPAKE2P_P521_SHA512_HKDF_HMAC:
+        #if defined(NO_HMAC) || !defined(WOLFSSL_SHA512)
+                ret = NOT_COMPILED_IN;
+        #endif
+                break;
+            case WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128:
+        #if !defined(WOLFSSL_CMAC) || defined(NO_AES) || \
+            !defined(WOLFSSL_AES_128)
+                ret = NOT_COMPILED_IN;
+        #endif
+                break;
+            default:
+                ret = BAD_FUNC_ARG;
+                break;
+        }
     }
 
     return ret;
@@ -408,5 +457,158 @@ int wc_Spake2pComputeL(int suite, const byte* w1, word32 w1Sz,
     return NOT_COMPILED_IN;
 #endif /* HAVE_ECC_KEY_IMPORT && HAVE_ECC_KEY_EXPORT */
 }
+
+/* ------------------------------------------------------------------------- */
+/* Lifecycle                                                                 */
+/* ------------------------------------------------------------------------- */
+
+/* Initialize a context for one protocol run.
+ *
+ * Any previous contents of ctx are discarded without being freed; call
+ * wc_Spake2pFree() first when reusing a context. ctx is zeroed before the
+ * arguments are checked, so wc_Spake2pFree() is safe to call on it even if
+ * this function fails.
+ *
+ * @param  [out]  ctx    Context to initialize.
+ * @param  [in]   suite  WC_SPAKE2P_<suite>.
+ * @param  [in]   role   WC_SPAKE2P_PROVER or WC_SPAKE2P_VERIFIER.
+ * @param  [in]   heap   Heap hint for allocations made by the context.
+ * @param  [in]   devId  Device id for crypto callbacks, or INVALID_DEVID.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when ctx is NULL, or suite or role is unknown.
+ * @return  NOT_COMPILED_IN when the suite's curve, hash or MAC is not
+ *          compiled in.
+ */
+int wc_Spake2pInit(wc_Spake2p* ctx, int suite, int role, void* heap, int devId)
+{
+    int ret;
+
+    if (ctx == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    XMEMSET(ctx, 0, sizeof(*ctx));
+
+    if ((role != WC_SPAKE2P_PROVER) && (role != WC_SPAKE2P_VERIFIER)) {
+        return BAD_FUNC_ARG;
+    }
+    ret = spake2p_suite_supported(suite);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ctx->heap  = heap;
+    ctx->devId = devId;
+    ctx->suite = (byte)suite;
+    ctx->role  = (byte)role;
+    ctx->state = WC_SPAKE2P_STATE_INIT;
+
+    return 0;
+}
+
+/* Release resources held by a context and zeroize it.
+ *
+ * Frees the owned copies of the context string and identities, then
+ * zeroizes the whole structure: w0, w1 or L, the ephemeral scalar, the
+ * shares and all derived keys. The structure itself is not freed. Safe to
+ * call with NULL, and safe to call more than once.
+ *
+ * @param  [in, out]  ctx  Context to free.
+ */
+void wc_Spake2pFree(wc_Spake2p* ctx)
+{
+    void* heap;
+
+    if (ctx == NULL) {
+        return;
+    }
+    heap = ctx->heap;
+    (void)heap;
+
+    /* Owned copies made by wc_Spake2pSetContext() and
+     * wc_Spake2pSetIdentities(). Not secret, but zeroed with everything
+     * else. */
+    if (ctx->context != NULL) {
+        ForceZero(ctx->context, ctx->contextSz);
+        XFREE(ctx->context, heap, DYNAMIC_TYPE_SPAKE2P);
+    }
+    if (ctx->idProver != NULL) {
+        ForceZero(ctx->idProver, ctx->idProverSz);
+        XFREE(ctx->idProver, heap, DYNAMIC_TYPE_SPAKE2P);
+    }
+    if (ctx->idVerifier != NULL) {
+        ForceZero(ctx->idVerifier, ctx->idVerifierSz);
+        XFREE(ctx->idVerifier, heap, DYNAMIC_TYPE_SPAKE2P);
+    }
+
+    /* Zeroizes all secrets and leaves every pointer NULL, so a second call
+     * is a no-op. */
+    ForceZero(ctx, sizeof(*ctx));
+}
+
+#ifndef WC_NO_CONSTRUCTORS
+/* Allocate and initialize a context.
+ *
+ * @param  [in]   suite        WC_SPAKE2P_<suite>.
+ * @param  [in]   role         WC_SPAKE2P_PROVER or WC_SPAKE2P_VERIFIER.
+ * @param  [in]   heap         Heap hint for the allocation and the context.
+ * @param  [in]   devId        Device id for crypto callbacks, or
+ *                             INVALID_DEVID.
+ * @param  [out]  result_code  Optional; receives 0 on success or the error.
+ * @return  New context on success.
+ * @return  NULL on failure: MEMORY_E, or an error from wc_Spake2pInit().
+ */
+wc_Spake2p* wc_Spake2pNew(int suite, int role, void* heap, int devId,
+    int* result_code)
+{
+    int ret;
+    wc_Spake2p* ctx;
+
+    ctx = (wc_Spake2p*)XMALLOC(sizeof(wc_Spake2p), heap,
+        DYNAMIC_TYPE_SPAKE2P);
+    if (ctx == NULL) {
+        ret = MEMORY_E;
+    }
+    else {
+        ret = wc_Spake2pInit(ctx, suite, role, heap, devId);
+        if (ret != 0) {
+            XFREE(ctx, heap, DYNAMIC_TYPE_SPAKE2P);
+            ctx = NULL;
+        }
+    }
+
+    if (result_code != NULL) {
+        *result_code = ret;
+    }
+
+    return ctx;
+}
+
+/* Free a context allocated with wc_Spake2pNew().
+ *
+ * @param  [in]   ctx    Context to free.
+ * @param  [out]  ctx_p  Optional; *ctx_p is set to NULL on success.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when ctx is NULL.
+ */
+int wc_Spake2pDelete(wc_Spake2p* ctx, wc_Spake2p** ctx_p)
+{
+    void* heap;
+
+    if (ctx == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    /* wc_Spake2pFree() zeroizes the heap hint along with everything else. */
+    heap = ctx->heap;
+    (void)heap;
+
+    wc_Spake2pFree(ctx);
+    XFREE(ctx, heap, DYNAMIC_TYPE_SPAKE2P);
+    if (ctx_p != NULL) {
+        *ctx_p = NULL;
+    }
+
+    return 0;
+}
+#endif /* !WC_NO_CONSTRUCTORS */
 
 #endif /* WOLFSSL_HAVE_SPAKE2P */
