@@ -26,6 +26,7 @@
  * wc_Spake2pSetContext(), wc_Spake2pSetIdentities(),
  * wc_Spake2pSetProverSecrets(), wc_Spake2pSetVerifierSecrets(),
  * wc_Spake2pGenerateShare(), wc_Spake2pProcessPeerShare(),
+ * wc_Spake2pVerifyPeerConfirm(), wc_Spake2pGetSharedKey(),
  * wc_Spake2pSetEphemeral() (test hooks only).
  */
 
@@ -2285,6 +2286,107 @@ int wc_Spake2pProcessPeerShare(wc_Spake2p* ctx, const byte* peerShare,
     ForceZero(V, sizeof(V));
 
     return ret;
+}
+
+/* Verify the peer's confirmation MAC (RFC 9383, Section 3.4), comparing in
+ * constant time:
+ *   Prover:   expects confirmV = MAC(K_confirmV, shareP)
+ *   Verifier: expects confirmP = MAC(K_confirmP, shareV)
+ * i.e. the MAC of this side's own share under the peer's confirmation key.
+ *
+ * On success the context is confirmed and K_shared becomes available. The
+ * confirmation keys are discarded either way (RFC 9383, Section 3.4).
+ * Argument and state errors leave the context unchanged; any other failure,
+ * including a mismatch, puts it in the failed state.
+ *
+ * @param  [in, out]  ctx            Context after
+ *                                   wc_Spake2pProcessPeerShare().
+ * @param  [in]       peerConfirm    Peer's confirmation MAC as received.
+ * @param  [in]       peerConfirmSz  Length of peerConfirm in bytes.
+ * @return  0 when the confirmation is valid.
+ * @return  MAC_CMP_FAILED_E when it is invalid or has the wrong length.
+ * @return  BAD_FUNC_ARG when ctx or peerConfirm is NULL.
+ * @return  BAD_STATE_E when the peer share has not been processed, or the
+ *          context is confirmed or failed.
+ * @return  Other negative value on MAC error.
+ */
+int wc_Spake2pVerifyPeerConfirm(wc_Spake2p* ctx, const byte* peerConfirm,
+    word32 peerConfirmSz)
+{
+    int ret;
+    Spake2pSuiteInfo info;
+    byte expected[WC_SPAKE2P_MAX_CONFIRM_SZ];
+
+    if ((ctx == NULL) || (peerConfirm == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    if (ctx->state != WC_SPAKE2P_STATE_KEYS) {
+        return BAD_STATE_E;
+    }
+
+    ret = spake2p_suite_info(ctx->suite, &info);
+    if (ret == 0) {
+        /* The peer MACs this side's share under the peer's key. */
+        ret = spake2p_mac(ctx, &info,
+            (ctx->role == WC_SPAKE2P_PROVER) ? ctx->kConfirmV :
+                                               ctx->kConfirmP,
+            ctx->share, ctx->shareSz, expected);
+    }
+    if (ret == 0) {
+        /* The length is public; the comparison of the bytes is not. */
+        if ((peerConfirmSz != info.tagSz) ||
+                (ConstantCompare(expected, peerConfirm,
+                    (int)info.tagSz) != 0)) {
+            ret = MAC_CMP_FAILED_E;
+        }
+    }
+
+    /* Confirmation keys are not needed after this, whatever the outcome. */
+    ForceZero(ctx->kConfirmP, sizeof(ctx->kConfirmP));
+    ForceZero(ctx->kConfirmV, sizeof(ctx->kConfirmV));
+    ctx->kConfirmSz = 0;
+    ForceZero(expected, sizeof(expected));
+
+    if (ret == 0) {
+        ctx->state = WC_SPAKE2P_STATE_CONFIRMED;
+    }
+    else {
+        ForceZero(ctx->kShared, sizeof(ctx->kShared));
+        ctx->kSharedSz = 0;
+        ctx->state = WC_SPAKE2P_STATE_FAILED;
+    }
+
+    return ret;
+}
+
+/* Retrieve K_shared (RFC 9383, Section 3.4). Only available once the peer's
+ * confirmation has been verified, so an unconfirmed key is never released.
+ * May be called more than once; nothing changes in the context.
+ *
+ * @param  [in]       ctx    Confirmed context.
+ * @param  [out]      key    Buffer that receives K_shared.
+ * @param  [in, out]  keySz  On in, size of key. On out, bytes written.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when a pointer is NULL.
+ * @return  BAD_STATE_E when the peer's confirmation has not been verified.
+ * @return  BUFFER_E when *keySz is too small.
+ */
+int wc_Spake2pGetSharedKey(wc_Spake2p* ctx, byte* key, word32* keySz)
+{
+    if ((ctx == NULL) || (key == NULL) || (keySz == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    if (ctx->state != WC_SPAKE2P_STATE_CONFIRMED) {
+        return BAD_STATE_E;
+    }
+    if (*keySz < ctx->kSharedSz) {
+        return BUFFER_E;
+    }
+
+    XMEMCPY(key, ctx->kShared, ctx->kSharedSz);
+    *keySz = ctx->kSharedSz;
+
+    return 0;
 }
 
 /* ------------------------------------------------------------------------- */

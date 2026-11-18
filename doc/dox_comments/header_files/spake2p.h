@@ -1172,16 +1172,23 @@ int wc_Spake2pProcessPeerShare(wc_Spake2p* ctx,
     A failure means the password was wrong, the two sides used different
     contexts, identities, or suites, a message was altered, or an attack is
     in progress; these cases cannot be distinguished. On the Verifier,
-    count each failure as a failed login attempt for rate limiting. On
-    failure, the context enters a failed state and all further calls except
-    wc_Spake2pFree() return BAD_STATE_E.
+    count each failure as a failed login attempt for rate limiting.
+
+    The confirmation keys are zeroized before returning, whatever the
+    outcome, as RFC 9383 requires; this side's own confirmation MAC was
+    already output by wc_Spake2pProcessPeerShare(). BAD_FUNC_ARG and
+    BAD_STATE_E leave the context unchanged. Any other failure, including a
+    mismatch, also zeroizes K_shared and puts the context in a failed state:
+    all further calls except wc_Spake2pFree() return BAD_STATE_E.
 
     \return 0 if the confirmation is valid.
     \return MAC_CMP_FAILED_E if the confirmation is invalid or has the
     wrong length.
     \return BAD_FUNC_ARG if ctx or peerConfirm is NULL.
     \return BAD_STATE_E if wc_Spake2pProcessPeerShare() has not succeeded,
-    or the context is in a failed state.
+    or this function was already called, or the context is in a failed
+    state.
+    \return <0 on other MAC errors.
 
     \param ctx a context after wc_Spake2pProcessPeerShare().
     \param peerConfirm the peer's confirmation MAC as received.
@@ -1219,7 +1226,9 @@ int wc_Spake2pVerifyPeerConfirm(wc_Spake2p* ctx,
     \return 0 on success.
     \return BAD_FUNC_ARG if any pointer is NULL.
     \return BAD_STATE_E if the peer's confirmation has not been verified.
-    \return BUFFER_E if *keySz is too small.
+    \return BUFFER_E if *keySz is too small. Nothing is written to key.
+
+    None of these errors change the context.
 
     \param ctx a confirmed context.
     \param key buffer that receives K_shared. WC_SPAKE2P_MAX_KEY_SZ bytes is
