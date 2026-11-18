@@ -10428,6 +10428,10 @@ then
     then
         AC_MSG_ERROR([--enable-spake2p requires HKDF (--enable-hkdf).])
     fi
+    if test "$ENABLED_HMAC" = "no"
+    then
+        AC_MSG_ERROR([--enable-spake2p requires HMAC (--enable-hmac).])
+    fi
     AM_CFLAGS="$AM_CFLAGS -DWOLFSSL_HAVE_SPAKE2P"
 fi
 
