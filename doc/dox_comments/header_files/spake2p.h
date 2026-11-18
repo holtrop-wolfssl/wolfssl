@@ -553,19 +553,22 @@
     different input (for example Matter) can use it unchanged.
 
     The extra 8 bytes per half make the bias of the modular reduction
-    negligible. Shorter inputs are accepted only if they are at least as
-    long as the group order, but the recommended lengths should be used for
-    interoperability with RFC 9383.
+    negligible. Other lengths are accepted from the group order length up
+    to twice the group order length, but the recommended lengths should be
+    used for interoperability with RFC 9383.
 
     The caller should zeroize the PBKDF output after this call.
 
     \return 0 on success.
     \return BAD_FUNC_ARG if any pointer is NULL, the suite is unknown, or
-    w0sSz or w1sSz is shorter than the group order.
+    w0sSz or w1sSz is shorter than the group order length or longer than
+    twice the group order length.
     \return BUFFER_E if *w0Sz or *w1Sz is smaller than the group order
     length.
     \return NOT_COMPILED_IN if the suite's curve is not compiled in.
-    \return <0 on other errors.
+    \return MEMORY_E if a temporary cannot be allocated.
+    \return <0 on other errors. On any error after the arguments are
+    validated, the first group-order-length bytes of w0 and w1 are zeroed.
 
     \param suite the ciphersuite, one of WC_SPAKE2P_*. Determines the group
     order.
