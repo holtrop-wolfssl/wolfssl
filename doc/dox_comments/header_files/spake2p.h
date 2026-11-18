@@ -269,7 +269,7 @@
     | BUFFER_E | Output buffer too small; the required size is not written |
     | NOT_COMPILED_IN | Suite's curve, hash, or MAC not compiled in |
     | IS_POINT_E | Peer share or L is not a valid point on the curve |
-    | ECC_INF_E | Peer share or a computed point is the point at infinity |
+    | ECC_INF_E | L, the peer share, or a computed point is the point at infinity (an encoded point reports this only for the uncompressed all-zero form; other encodings of infinity give IS_POINT_E) |
     | MAC_CMP_FAILED_E | Peer confirmation did not verify: wrong password, mismatched context or identities, or an attack |
 
     From the network's point of view, all failures should be reported to the
@@ -931,6 +931,9 @@ int wc_Spake2pSetIdentities(wc_Spake2p* ctx,
     order).
     \return BAD_STATE_E if ctx was initialized as WC_SPAKE2P_VERIFIER, or
     the secrets were already set.
+    \return MEMORY_E if a temporary cannot be allocated.
+
+    On any error the context is unchanged and remains usable.
 
     \param ctx a context initialized with WC_SPAKE2P_PROVER.
     \param w0 the w0 scalar.
@@ -970,10 +973,20 @@ int wc_Spake2pSetProverSecrets(wc_Spake2p* ctx,
     \return 0 on success.
     \return BAD_FUNC_ARG if any pointer is NULL, or w0 is not a valid
     scalar for the suite.
-    \return IS_POINT_E if L is not a valid encoded point on the curve.
-    \return ECC_INF_E if L is the point at infinity.
+    \return IS_POINT_E if L is not a valid encoded point on the curve,
+    including any encoding other than SEC1 uncompressed of exactly
+    1 + 2 * (field size) bytes. This includes the SEC1 encoding of the
+    point at infinity, the single byte 0x00.
+    \return ECC_INF_E if L is an uncompressed encoding with both
+    coordinates zero (0x04 followed by all zero bytes), the affine form
+    used for the point at infinity.
     \return BAD_STATE_E if ctx was initialized as WC_SPAKE2P_PROVER, or the
     secrets were already set.
+    \return NOT_COMPILED_IN if ECC key import is not compiled in
+    (NO_ECC_KEY_IMPORT).
+    \return MEMORY_E if a temporary cannot be allocated.
+
+    On any error the context is unchanged and remains usable.
 
     \param ctx a context initialized with WC_SPAKE2P_VERIFIER.
     \param w0 the w0 scalar.

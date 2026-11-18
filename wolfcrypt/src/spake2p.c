@@ -23,7 +23,8 @@
  *
  * Implemented so far: wc_Spake2pDeriveW0W1(), wc_Spake2pComputeL(),
  * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete(),
- * wc_Spake2pSetContext(), wc_Spake2pSetIdentities().
+ * wc_Spake2pSetContext(), wc_Spake2pSetIdentities(),
+ * wc_Spake2pSetProverSecrets(), wc_Spake2pSetVerifierSecrets().
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -298,7 +299,6 @@ int wc_Spake2pDeriveW0W1(int suite,
     return ret;
 }
 
-#if defined(HAVE_ECC_KEY_IMPORT) && defined(HAVE_ECC_KEY_EXPORT)
 /* Check that a scalar is a valid private value for the suite's curve: exactly
  * the group order length, and in [1, order - 1].
  *
@@ -358,7 +358,6 @@ static int spake2p_check_scalar(int suite, const byte* scalar,
 
     return ret;
 }
-#endif /* HAVE_ECC_KEY_IMPORT && HAVE_ECC_KEY_EXPORT */
 
 /* Compute the Verifier's registration value L = w1 * P (RFC 9383,
  * Section 3.2), where P is the generator of the suite's curve, encoded as a
@@ -757,6 +756,190 @@ int wc_Spake2pSetIdentities(wc_Spake2p* ctx,
     }
 
     return ret;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Long-term secrets                                                         */
+/* ------------------------------------------------------------------------- */
+
+/* Load the Prover's secrets w0 and w1.
+ *
+ * Both must be exactly the group order length and in [1, order - 1]. They
+ * are copied into the context. On error the context is unchanged and still
+ * usable.
+ *
+ * @param  [in, out]  ctx   Context initialized as WC_SPAKE2P_PROVER.
+ * @param  [in]       w0    w0 scalar.
+ * @param  [in]       w0Sz  Length of w0 in bytes.
+ * @param  [in]       w1    w1 scalar.
+ * @param  [in]       w1Sz  Length of w1 in bytes.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when a pointer is NULL, or w0 or w1 is not a valid
+ *          scalar.
+ * @return  BAD_STATE_E when ctx is not a Prover, or secrets are already
+ *          set.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+int wc_Spake2pSetProverSecrets(wc_Spake2p* ctx,
+    const byte* w0, word32 w0Sz, const byte* w1, word32 w1Sz)
+{
+    int ret;
+
+    if ((ctx == NULL) || (w0 == NULL) || (w1 == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    if ((ctx->role != WC_SPAKE2P_PROVER) ||
+            (ctx->state != WC_SPAKE2P_STATE_INIT)) {
+        return BAD_STATE_E;
+    }
+
+    ret = spake2p_check_scalar(ctx->suite, w0, w0Sz, ctx->heap);
+    if (ret == 0) {
+        ret = spake2p_check_scalar(ctx->suite, w1, w1Sz, ctx->heap);
+    }
+    if (ret == 0) {
+        /* Valid scalars are the order length, which fits these buffers. */
+        XMEMCPY(ctx->w0, w0, w0Sz);
+        ctx->w0Sz = w0Sz;
+        XMEMCPY(ctx->sec.w1, w1, w1Sz);
+        ctx->secSz = w1Sz;
+        ctx->state = WC_SPAKE2P_STATE_SECRETS;
+    }
+
+    return ret;
+}
+
+#ifdef HAVE_ECC_KEY_IMPORT
+/* Check that L is a SEC1 uncompressed encoding of a point on the suite's
+ * curve that is not the point at infinity.
+ *
+ * The NIST curves used by SPAKE2+ have cofactor 1, so every point on the
+ * curve other than the identity is in the prime-order group.
+ *
+ * @param  [in]  suite  WC_SPAKE2P_<suite>.
+ * @param  [in]  L      Encoded point.
+ * @param  [in]  LSz    Length of L in bytes.
+ * @param  [in]  heap   Heap hint for temporary allocations.
+ * @return  0 when L is valid.
+ * @return  IS_POINT_E when L is malformed or not on the curve, including
+ *          the SEC1 infinity encoding (single byte 0x00).
+ * @return  ECC_INF_E when L is 0x04 followed by all zero bytes, the affine
+ *          (0, 0) form of the point at infinity.
+ * @return  BAD_FUNC_ARG when the suite is unknown.
+ * @return  NOT_COMPILED_IN when the suite's curve is not compiled in.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+static int spake2p_check_point(int suite, const byte* L, word32 LSz,
+    void* heap)
+{
+    int ret;
+    int curveId = 0;
+    int idx = -1;
+    int curveSz = 0;
+    ecc_point* pt = NULL;
+
+    ret = spake2p_suite_curve(suite, &curveId);
+    if (ret == 0) {
+        idx = wc_ecc_get_curve_idx(curveId);
+        curveSz = wc_ecc_get_curve_size_from_id(curveId);
+        if ((idx < 0) || (curveSz <= 0)) {
+            ret = NOT_COMPILED_IN;
+        }
+    }
+    /* Uncompressed only: 0x04 || X || Y, each coordinate the field size. */
+    if ((ret == 0) && ((LSz != (word32)(1 + 2 * curveSz)) ||
+            (L[0] != ECC_POINT_UNCOMP))) {
+        ret = IS_POINT_E;
+    }
+    if (ret == 0) {
+        pt = wc_ecc_new_point_h(heap);
+        if (pt == NULL) {
+            ret = MEMORY_E;
+        }
+    }
+    if ((ret == 0) && (wc_ecc_import_point_der(L, LSz, idx, pt) != 0)) {
+        ret = IS_POINT_E;
+    }
+    /* (0, 0) is how the identity decodes; it is not on these curves, so
+     * check it first to report it distinctly. */
+    if ((ret == 0) && mp_iszero(pt->x) && mp_iszero(pt->y)) {
+        ret = ECC_INF_E;
+    }
+    /* Coordinates in [0, p - 1] and the curve equation holds. */
+    if ((ret == 0) && (wc_ecc_point_is_on_curve(pt, idx) != 0)) {
+        ret = IS_POINT_E;
+    }
+
+    if (pt != NULL) {
+        wc_ecc_del_point_h(pt, heap);
+    }
+    (void)heap;
+
+    return ret;
+}
+#endif /* HAVE_ECC_KEY_IMPORT */
+
+/* Load the Verifier's registration record (w0, L).
+ *
+ * w0 must be exactly the group order length and in [1, order - 1]. L must
+ * be a SEC1 uncompressed point on the suite's curve, not the point at
+ * infinity. Both are copied into the context. On error the context is
+ * unchanged and still usable.
+ *
+ * @param  [in, out]  ctx   Context initialized as WC_SPAKE2P_VERIFIER.
+ * @param  [in]       w0    w0 scalar.
+ * @param  [in]       w0Sz  Length of w0 in bytes.
+ * @param  [in]       L     Encoded point L = w1 * P.
+ * @param  [in]       LSz   Length of L in bytes.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when a pointer is NULL, or w0 is not a valid
+ *          scalar.
+ * @return  IS_POINT_E when L is malformed or not on the curve, including
+ *          the SEC1 infinity encoding (single byte 0x00).
+ * @return  ECC_INF_E when L is 0x04 followed by all zero bytes, the affine
+ *          (0, 0) form of the point at infinity.
+ * @return  BAD_STATE_E when ctx is not a Verifier, or secrets are already
+ *          set.
+ * @return  NOT_COMPILED_IN when ECC key import is not compiled in.
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+int wc_Spake2pSetVerifierSecrets(wc_Spake2p* ctx,
+    const byte* w0, word32 w0Sz, const byte* L, word32 LSz)
+{
+#ifdef HAVE_ECC_KEY_IMPORT
+    int ret;
+
+    if ((ctx == NULL) || (w0 == NULL) || (L == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    if ((ctx->role != WC_SPAKE2P_VERIFIER) ||
+            (ctx->state != WC_SPAKE2P_STATE_INIT)) {
+        return BAD_STATE_E;
+    }
+
+    ret = spake2p_check_scalar(ctx->suite, w0, w0Sz, ctx->heap);
+    if (ret == 0) {
+        ret = spake2p_check_point(ctx->suite, L, LSz, ctx->heap);
+    }
+    if (ret == 0) {
+        /* A valid L is 1 + 2 * field size, which fits sec.L. */
+        XMEMCPY(ctx->w0, w0, w0Sz);
+        ctx->w0Sz = w0Sz;
+        XMEMCPY(ctx->sec.L, L, LSz);
+        ctx->secSz = LSz;
+        ctx->state = WC_SPAKE2P_STATE_SECRETS;
+    }
+
+    return ret;
+#else
+    (void)ctx;
+    (void)w0;
+    (void)w0Sz;
+    (void)L;
+    (void)LSz;
+
+    return NOT_COMPILED_IN;
+#endif /* HAVE_ECC_KEY_IMPORT */
 }
 
 #endif /* WOLFSSL_HAVE_SPAKE2P */
