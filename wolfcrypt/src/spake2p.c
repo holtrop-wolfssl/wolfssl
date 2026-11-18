@@ -25,7 +25,7 @@
  * wc_Spake2pInit(), wc_Spake2pFree(), wc_Spake2pNew(), wc_Spake2pDelete(),
  * wc_Spake2pSetContext(), wc_Spake2pSetIdentities(),
  * wc_Spake2pSetProverSecrets(), wc_Spake2pSetVerifierSecrets(),
- * wc_Spake2pGenerateShare().
+ * wc_Spake2pGenerateShare(), wc_Spake2pSetEphemeral() (test hooks only).
  */
 
 #include <wolfssl/wolfcrypt/libwolfssl_sources.h>
@@ -1375,5 +1375,52 @@ int wc_Spake2pGenerateShare(wc_Spake2p* ctx, WC_RNG* rng, byte* share,
 
     return ret;
 }
+
+/* ------------------------------------------------------------------------- */
+/* Test hooks                                                                */
+/* ------------------------------------------------------------------------- */
+
+#ifdef WOLFSSL_SPAKE2P_TEST_HOOKS
+/* Fix the ephemeral scalar (x for the Prover, y for the Verifier) used by
+ * wc_Spake2pGenerateShare(), for known-answer tests only.
+ *
+ * The scalar must be exactly the group order length and in
+ * [1, order - 1]. It is copied into the context and zeroized by
+ * wc_Spake2pFree(). Calling again replaces it; on error the context is
+ * unchanged.
+ *
+ * @param  [in, out]  ctx       Initialized context.
+ * @param  [in]       scalar    Ephemeral scalar, big-endian.
+ * @param  [in]       scalarSz  Length of scalar in bytes.
+ * @return  0 on success.
+ * @return  BAD_FUNC_ARG when ctx or scalar is NULL, or the scalar is not
+ *          valid for the suite.
+ * @return  BAD_STATE_E when called after wc_Spake2pGenerateShare().
+ * @return  MEMORY_E when dynamic memory allocation fails.
+ */
+int wc_Spake2pSetEphemeral(wc_Spake2p* ctx, const byte* scalar,
+    word32 scalarSz)
+{
+    int ret;
+
+    if ((ctx == NULL) || (scalar == NULL)) {
+        return BAD_FUNC_ARG;
+    }
+    /* Same window as the transcript inputs: before the share exists. */
+    if (!spake2p_transcript_settable(ctx)) {
+        return BAD_STATE_E;
+    }
+
+    ret = spake2p_check_scalar(ctx->suite, scalar, scalarSz, ctx->heap);
+    if (ret == 0) {
+        /* A valid scalar is the order length, which fits eph. */
+        XMEMCPY(ctx->eph, scalar, scalarSz);
+        ctx->ephSz = scalarSz;
+        ctx->ephSet = 1;
+    }
+
+    return ret;
+}
+#endif /* WOLFSSL_SPAKE2P_TEST_HOOKS */
 
 #endif /* WOLFSSL_HAVE_SPAKE2P */

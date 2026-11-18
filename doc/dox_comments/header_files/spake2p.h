@@ -1235,14 +1235,17 @@ int wc_Spake2pGetSharedKey(wc_Spake2p* ctx, byte* key, word32* keySz);
     that macro in production builds: reusing or predicting the ephemeral
     scalar breaks the security of the protocol and can reveal w0.
 
-    Must be called before wc_Spake2pGenerateShare(). The scalar is copied by
-    this function, and zeroized by wc_Spake2pFree().
+    Must be called before wc_Spake2pGenerateShare(), either before or after
+    the secrets are loaded. The scalar is copied by this function, and
+    zeroized by wc_Spake2pFree(). Calling it again replaces the scalar; if
+    it fails, the context is unchanged.
 
     \return 0 on success.
     \return BAD_FUNC_ARG if ctx or scalar is NULL, or the scalar is not
     valid for the suite (wrong length, zero, or not less than the group
     order).
     \return BAD_STATE_E if called after wc_Spake2pGenerateShare().
+    \return MEMORY_E if a temporary cannot be allocated.
 
     \param ctx an initialized context.
     \param scalar the ephemeral scalar, big-endian.
