@@ -218,6 +218,7 @@
 #include <tests/api/test_cmac.h>
 #include <tests/api/test_siphash.h>
 #include <tests/api/test_srp.h>
+#include <tests/api/test_spake2p.h>
 #include <tests/api/test_eccsi.h>
 #include <tests/api/test_sakke.h>
 #include <tests/api/test_hpke.h>
@@ -48027,6 +48028,7 @@ TEST_CASE testCases[] = {
     /* SipHash */
     TEST_SIPHASH_DECLS,
     TEST_SRP_DECLS,
+    TEST_SPAKE2P_DECLS,
     TEST_ECCSI_DECLS,
     TEST_SAKKE_DECLS,
     TEST_HPKE_DECLS,

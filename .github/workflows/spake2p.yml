@@ -1,0 +1,83 @@
+name: SPAKE2+ known-answer tests
+
+# START OF COMMON SECTION
+on:
+  push:
+    branches: [ 'release/**' ]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ '*' ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+# END OF COMMON SECTION
+
+jobs:
+  # The RFC 9383 Appendix C known-answer test (test_wc_Spake2pRfcVectors in
+  # tests/api/test_spake2p.c) runs the whole exchange with fixed ephemeral
+  # scalars, which needs WOLFSSL_SPAKE2P_TEST_HOOKS; every other build skips
+  # it. The CMAC-AES-128 suite also needs --enable-cmac, which is off by
+  # default. This job turns both on so the KATs actually run in CI.
+  #
+  # One runner per point-arithmetic path SPAKE2+ can take:
+  #  - generic  : multi-precision math (wc_ecc_mulmod_ex2 + safe add).
+  #  - smallstack: same, with temporaries on the heap.
+  #  - sp       : single-precision C code (sp_ecc_mulmod_*_N).
+  #  - sp-asm   : single-precision assembly.
+  #  - sp-math  : SP math only; the generic path is not compiled.
+  spake2p_kat:
+    name: SPAKE2+ KATs (${{ matrix.name }})
+    if: ${{ (github.repository_owner == 'wolfssl') && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: generic
+            config: ""
+          - name: smallstack
+            config: "--enable-smallstack"
+          - name: sp
+            config: "--enable-sp"
+          - name: sp-asm
+            config: "--enable-sp --enable-sp-asm"
+          - name: sp-math
+            config: "--enable-sp-math"
+    steps:
+      - uses: actions/checkout@v5
+        name: Checkout wolfSSL
+
+      - name: Build
+        run: |
+          ./autogen.sh
+          ./configure --enable-spake2p --enable-cmac \
+              ${{ matrix.config }} \
+              CPPFLAGS=-DWOLFSSL_SPAKE2P_TEST_HOOKS
+          make -j"$(nproc)" tests/unit.test
+
+      # If either define failed to reach the build, the RFC test (or the
+      # CMAC suite) would be skipped and still report success. Fail instead.
+      - name: Assert hooks and CMAC are enabled
+        run: |
+          grep -q '^#define WOLFSSL_HAVE_SPAKE2P$' wolfssl/options.h
+          grep -q '^#define WOLFSSL_SPAKE2P_TEST_HOOKS$' wolfssl/options.h
+          grep -q '^#define WOLFSSL_CMAC$' wolfssl/options.h
+
+      - name: Run SPAKE2+ unit tests
+        run: |
+          ./tests/unit.test --group spake2p | tee spake2p-test.log
+          # Every test in the group must run: none skipped.
+          grep -q 'Failed/Skipped/Passed/All: 0/0/' spake2p-test.log
+          grep -Eq 'test_wc_Spake2pRfcVectors +: passed' spake2p-test.log
+
+      - name: Print errors
+        if: ${{ failure() }}
+        run: |
+          if [ -f spake2p-test.log ] ; then
+            cat spake2p-test.log
+          fi
