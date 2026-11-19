@@ -81,6 +81,7 @@ static int spake2p_suite_curve(int suite, int* curveId)
         case WC_SPAKE2P_P256_SHA256_HKDF_HMAC:
         case WC_SPAKE2P_P256_SHA512_HKDF_HMAC:
         case WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128:
+        case WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128:
             *curveId = ECC_SECP256R1;
             break;
         case WC_SPAKE2P_P384_SHA256_HKDF_HMAC:
@@ -132,6 +133,12 @@ static int spake2p_suite_supported(int suite)
             case WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128:
         #if !defined(WOLFSSL_CMAC) || defined(NO_AES) || \
             !defined(WOLFSSL_AES_128)
+                ret = NOT_COMPILED_IN;
+        #endif
+                break;
+            case WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128:
+        #if !defined(WOLFSSL_CMAC) || defined(NO_AES) || \
+            !defined(WOLFSSL_AES_128) || !defined(WOLFSSL_SHA512)
                 ret = NOT_COMPILED_IN;
         #endif
                 break;
@@ -1725,6 +1732,10 @@ static int spake2p_suite_info(int suite, Spake2pSuiteInfo* info)
             break;
         case WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128:
             info->hashType = WC_HASH_TYPE_SHA256;
+            info->macType = SPAKE2P_MAC_CMAC;
+            break;
+        case WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128:
+            info->hashType = WC_HASH_TYPE_SHA512;
             info->macType = SPAKE2P_MAC_CMAC;
             break;
         default:

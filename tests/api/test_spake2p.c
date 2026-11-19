@@ -36,11 +36,10 @@
 
 #ifdef WOLFSSL_HAVE_SPAKE2P
 
-/* RFC 9383 Appendix C test vectors, one per supported ciphersuite. (The
- * RFC's P256-SHA512-HKDF-SHA512-CMAC-AES-128 suite is not implemented.)
- * The full exchange needs a fixed ephemeral scalar, so x, y, the shares,
- * MACs and K_shared are only checked with WOLFSSL_SPAKE2P_TEST_HOOKS; w0,
- * w1 and L are checked in every build. */
+/* RFC 9383 Appendix C test vectors, one per ciphersuite. The full exchange
+ * needs a fixed ephemeral scalar, so x, y, the shares, MACs and K_shared are
+ * only checked with WOLFSSL_SPAKE2P_TEST_HOOKS; w0, w1 and L are checked in
+ * every build. */
 typedef struct Spake2pRfcVector {
     int         suite;
     const char* context;
@@ -282,6 +281,38 @@ static const Spake2pRfcVector spake2pRfcVectors[] = {
         /* K_shared */
         "e832094adfc028bf288e49ab902fc208b7eeff084f259da7613c0479869d4fc9"
     },
+    {
+        WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128,
+        "SPAKE2+-P256-SHA512-HKDF-SHA512-CMAC-AES-128 Test Vectors",
+        "client", "server",
+        /* w0 */
+        "56e0299ac95739b616a973276c1338e3651285345dde2f7faf74c25c0b50eb90",
+        /* w1 */
+        "462fe5b522a17d3d35b27323113bdd252de9cbfdd6f264b35721bf59a9a74f0b",
+        /* L */
+        "040540332ffec8a2faa8d17ae6da5973c11e078b8c10c89fd6af996726b80235"
+        "13eff2914c3ced64fbedd4e261438fb0ea6ef9fc1faef4ba1ead780636faac1b"
+        "c1",
+        /* x */
+        "254dd22780eeb6af2464dd6a2bd026b46a34966d6933607f1be956314f74b0ea",
+        /* shareP */
+        "049661cfdb0f7bd24b637f8d1d0f464c17f0b9c15129ea31156dcc581da6c840"
+        "240b275d72f28ea73a5c088c99d73896af24a5ae26e036eb2dedaf26e511a24a"
+        "48",
+        /* y */
+        "695beec24305fbd5660bc200228598e7c891fdf60a55df4bdd3a57debc38474a",
+        /* shareV */
+        "0461f580eb3eb4b2f412d5c07491f360ad6e4492d8f23e346f0ba999fbbcb971"
+        "5a3c2485c3b250a6672e6698da3c9a9725645f607ee90a9b1b34fd44b9df6e55"
+        "1a",
+        /* macP */
+        "0dc514d262e37470eb43e058e0d615f4",
+        /* macV */
+        "de076589efcd5d96c2ea6061d96772d9",
+        /* K_shared */
+        "488a34663d6be5e02590bb8e9ad9ad3e0f580dec41e8b99ed4ae4b734da49287"
+        "638cac4c9f17fe3c3ae18dda0d6d7f14c17e4640d5a2aaab959efa0cbea4e546"
+    },
 };
 
 #ifndef WC_NO_RNG
@@ -308,6 +339,10 @@ static const char spake2pDerive521W1[] =
     "000000000000000000000000000000000000000000000000016b9e5e1f10341a"
     "65200cffadc23d968bf1128d91dd98ee14512412385bb1e6fdc0000000000000"
     "0000";
+
+/* Highest suite identifier, and one past it (an unknown suite). */
+#define SPAKE2P_SUITE_LAST     WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128
+#define SPAKE2P_SUITE_UNKNOWN  (SPAKE2P_SUITE_LAST + 1)
 
 #define SPAKE2P_RFC_VECTOR_CNT \
     ((int)(sizeof(spake2pRfcVectors) / sizeof(spake2pRfcVectors[0])))
@@ -377,6 +412,7 @@ static word32 spake2p_hash_sz(int suite)
         case WC_SPAKE2P_P256_SHA512_HKDF_HMAC:
         case WC_SPAKE2P_P384_SHA512_HKDF_HMAC:
         case WC_SPAKE2P_P521_SHA512_HKDF_HMAC:
+        case WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128:
             return 64;
         default:
             return 32;
@@ -576,8 +612,8 @@ int test_wc_Spake2pDeriveW0W1(void)
         NULL, NULL), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
     ExpectIntEQ(wc_Spake2pDeriveW0W1(0, in0, 40, in1, 40, w0, &w0Sz, w1,
         &w1Sz, NULL), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
-    ExpectIntEQ(wc_Spake2pDeriveW0W1(7, in0, 40, in1, 40, w0, &w0Sz, w1,
-        &w1Sz, NULL), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
+    ExpectIntEQ(wc_Spake2pDeriveW0W1(SPAKE2P_SUITE_UNKNOWN, in0, 40, in1, 40,
+        w0, &w0Sz, w1, &w1Sz, NULL), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
 #endif /* WOLFSSL_HAVE_SPAKE2P */
     return EXPECT_RESULT();
 }
@@ -665,8 +701,8 @@ int test_wc_Spake2pComputeL(void)
         WC_NO_ERR_TRACE(BAD_FUNC_ARG));
     ExpectIntEQ(wc_Spake2pComputeL(0, w1, 32, L, &LSz, NULL, INVALID_DEVID),
         WC_NO_ERR_TRACE(BAD_FUNC_ARG));
-    ExpectIntEQ(wc_Spake2pComputeL(7, w1, 32, L, &LSz, NULL, INVALID_DEVID),
-        WC_NO_ERR_TRACE(BAD_FUNC_ARG));
+    ExpectIntEQ(wc_Spake2pComputeL(SPAKE2P_SUITE_UNKNOWN, w1, 32, L, &LSz,
+        NULL, INVALID_DEVID), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
 #endif /* WOLFSSL_HAVE_SPAKE2P */
     return EXPECT_RESULT();
 }
@@ -722,7 +758,7 @@ int test_wc_Spake2pInitFree(void)
 
     /* Every suite and role; suites not compiled in are NOT_COMPILED_IN. */
     for (suite = WC_SPAKE2P_P256_SHA256_HKDF_HMAC;
-            suite <= WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128; suite++) {
+            suite <= SPAKE2P_SUITE_LAST; suite++) {
         for (role = WC_SPAKE2P_PROVER; role <= WC_SPAKE2P_VERIFIER; role++) {
             int ret;
             XMEMSET(&ctx, 0xA5, sizeof(ctx));
@@ -756,8 +792,9 @@ int test_wc_Spake2pInitFree(void)
         INVALID_DEVID), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
     ExpectTrue(spake2p_all_zero((const byte*)&ctx, sizeof(ctx)));
     wc_Spake2pFree(&ctx);
-    ExpectIntEQ(wc_Spake2pInit(&ctx, 7, WC_SPAKE2P_PROVER, NULL,
-        INVALID_DEVID), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
+    ExpectIntEQ(wc_Spake2pInit(&ctx, SPAKE2P_SUITE_UNKNOWN,
+        WC_SPAKE2P_PROVER, NULL, INVALID_DEVID),
+        WC_NO_ERR_TRACE(BAD_FUNC_ARG));
     XMEMSET(&ctx, 0xA5, sizeof(ctx));
     ExpectIntEQ(wc_Spake2pInit(&ctx, WC_SPAKE2P_P256_SHA256_HKDF_HMAC, 2,
         NULL, INVALID_DEVID), WC_NO_ERR_TRACE(BAD_FUNC_ARG));
@@ -1108,7 +1145,7 @@ int test_wc_Spake2pExchange(void)
     ExpectIntEQ(wc_InitRng(&rng), 0);
 
     for (suite = WC_SPAKE2P_P256_SHA256_HKDF_HMAC;
-            suite <= WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128; suite++) {
+            suite <= SPAKE2P_SUITE_LAST; suite++) {
         if (!spake2p_suite_available(suite))
             continue;
         XMEMSET(prev, 0, sizeof(prev));

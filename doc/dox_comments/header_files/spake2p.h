@@ -54,7 +54,7 @@
     - SHA-512 suites require WOLFSSL_SHA512.
     - P-384 and P-521 suites require those curves to be compiled in (with
       ECC_USER_CURVES, define HAVE_ECC384 / HAVE_ECC521).
-    - The CMAC suite requires WOLFSSL_CMAC (--enable-cmac) and AES-128.
+    - The CMAC suites require WOLFSSL_CMAC (--enable-cmac) and AES-128.
 
     A suite that is not compiled in is rejected at runtime with
     NOT_COMPILED_IN. The suite identifiers themselves are always defined.
@@ -74,6 +74,7 @@
     | WC_SPAKE2P_P384_SHA512_HKDF_HMAC        | 48 | 56 | 97  | 64 | 64 |
     | WC_SPAKE2P_P521_SHA512_HKDF_HMAC        | 66 | 74 | 133 | 64 | 64 |
     | WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128 | 32 | 40 | 65  | 16 | 32 |
+    | WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128 | 32 | 40 | 65  | 16 | 64 |
 
     All sizes are in bytes. Rather than hard-coding them, size buffers with
     the compile-time maximums and use the length each function returns:

@@ -99,8 +99,8 @@ enum {
     WC_SPAKE2P_P384_SHA256_HKDF_HMAC        = 3,
     WC_SPAKE2P_P384_SHA512_HKDF_HMAC        = 4,
     WC_SPAKE2P_P521_SHA512_HKDF_HMAC        = 5,
-    WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128 = 6
-    /* edwards25519 / edwards448 suites: reserved for future use. */
+    WC_SPAKE2P_P256_SHA256_HKDF_CMAC_AES128 = 6,
+    WC_SPAKE2P_P256_SHA512_HKDF_CMAC_AES128 = 7
 };
 
 /* Largest scalar (w0, w1, x, y) for any enabled curve. */
